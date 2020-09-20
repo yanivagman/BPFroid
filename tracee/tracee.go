@@ -1,12 +1,16 @@
 package tracee
 
 import (
+	"bufio"
 	"bytes"
+	"debug/elf"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path"
 	"path/filepath"
@@ -27,6 +31,8 @@ type TraceeConfig struct {
 	PerfBufferSize     int
 	BlobPerfBufferSize int
 	SecurityAlerts     bool
+	ApiHookConfigs        []apiHookConfig
+	LibHookConfigs        []libHookConfig
 	maxPidsCache       int // maximum number of pids to cache per mnt ns (in Tracee.pidsInMntns)
 	BPFObjPath         string
 }
@@ -174,6 +180,52 @@ func (tc TraceeConfig) Validate() error {
 	return nil
 }
 
+type hookDescriptor struct {
+	Filename   string   `json:"filename"`
+	Offset     uint64   `json:"addr_off"`
+	ClassName  string   `json:"class_name"`
+	Method     string   `json:"method"`
+	ArgsTypes  []string `json:"args_types"`
+	ArgOff     int      `json:"arg_off"`
+	MethodIdx  int      `json:"method_idx"`
+	AddrCount  int      `json:"addr_count"`
+	UprobeType string   `json:"uprobe_type"`
+}
+
+type apiHookConfig struct {
+	ClassName  string `json:"class_name"`
+	Method     string `json:"method"`
+	ThisObject bool   `json:"thisObject"`
+	HookType   string `json:"type"`
+}
+
+type libHookConfig struct {
+	LibPath   string   `json:"lib_path"`
+	SymName   string   `json:"sym_name"`
+	Offset    string   `json:"offset"`
+	ArgsTypes []string `json:"args_types"`
+}
+
+type syscallHookConfig struct {
+	Name  string   `json:"name"`
+}
+
+type kprobeHookConfig struct {
+	Name  string   `json:"name"`
+}
+
+type hooksConfigs struct {
+	Api      []apiHookConfig     `json:"api"`
+	Syscalls []syscallHookConfig `json:"syscalls"`
+	Kprobes  []kprobeHookConfig  `json:"kprobes"`
+	Uprobes  []libHookConfig     `json:"uprobes"`
+}
+
+type BpfroidConfig struct {
+	HookConfigs hooksConfigs `json:"hookConfigs"`
+	Trace       bool         `json:"trace"`
+}
+
 // Tracee traces system calls and system events using eBPF
 type Tracee struct {
 	config            TraceeConfig
@@ -194,6 +246,13 @@ type Tracee struct {
 	EncParamName      [2]map[string]argTag
 	pidsInMntns       bucketsCache //record the first n PIDs (host) in each mount namespace, for internal usage
 	StackAddressesMap *bpf.BPFMap
+	// Hooks data
+	soBases     map[string]uint64
+	oatBases    map[string]uint64
+	oatdataOffs map[string]uint64
+	uprobesDesc map[uint64]hookDescriptor
+	apiHooks    []hookDescriptor
+	noCodeHooks []hookDescriptor
 }
 
 type counter int32
@@ -293,6 +352,11 @@ func New(cfg TraceeConfig) (*Tracee, error) {
 	t.EncParamName[0] = make(map[string]argTag)
 	t.DecParamName[1] = make(map[argTag]external.ArgMeta)
 	t.EncParamName[1] = make(map[string]argTag)
+
+	t.soBases = make(map[string]uint64)
+	t.oatBases = make(map[string]uint64)
+	t.oatdataOffs = make(map[string]uint64)
+	t.uprobesDesc = make(map[uint64]hookDescriptor)
 
 	err = t.initBPF(cfg.BPFObjPath)
 	if err != nil {
@@ -433,6 +497,39 @@ type eventParam struct {
 	encName argTag
 }
 
+func encParamType(Type string) argType {
+	switch Type {
+	case "int", "pid_t", "uid_t", "gid_t", "mqd_t", "clockid_t", "const clockid_t", "key_t", "key_serial_t", "timer_t":
+		return intT
+	case "unsigned int", "u32":
+		return uintT
+	case "long", "int64":
+		return longT
+	case "unsigned long", "u64":
+		return ulongT
+	case "off_t":
+		return offT
+	case "mode_t":
+		return modeT
+	case "dev_t":
+		return devT
+	case "size_t":
+		return sizeT
+	case "void*", "const void*":
+		return pointerT
+	case "char*", "const char*":
+		return strT
+	case "const char*const*", "const char**", "char**":
+		return strArrT
+	case "const struct sockaddr*", "struct sockaddr*":
+		return sockAddrT
+	default:
+		//fmt.Printf("Unsupported parameter type: %s\n", Type)
+		// Default to pointer (printed as hex) for unsupported types
+		return pointerT
+	}
+}
+
 func (t *Tracee) initEventsParams() map[int32][]eventParam {
 	eventsParams := make(map[int32][]eventParam)
 	var seenNames [2]map[string]bool
@@ -444,35 +541,7 @@ func (t *Tracee) initEventsParams() map[int32][]eventParam {
 	paramT := noneT
 	for id, params := range EventsIDToParams {
 		for _, param := range params {
-			switch param.Type {
-			case "int", "pid_t", "uid_t", "gid_t", "mqd_t", "clockid_t", "const clockid_t", "key_t", "key_serial_t", "timer_t":
-				paramT = intT
-			case "unsigned int", "u32":
-				paramT = uintT
-			case "long":
-				paramT = longT
-			case "unsigned long", "u64":
-				paramT = ulongT
-			case "off_t":
-				paramT = offT
-			case "mode_t":
-				paramT = modeT
-			case "dev_t":
-				paramT = devT
-			case "size_t":
-				paramT = sizeT
-			case "void*", "const void*":
-				paramT = pointerT
-			case "char*", "const char*":
-				paramT = strT
-			case "const char*const*", "const char**", "char**":
-				paramT = strArrT
-			case "const struct sockaddr*", "struct sockaddr*":
-				paramT = sockAddrT
-			default:
-				// Default to pointer (printed as hex) for unsupported types
-				paramT = pointerT
-			}
+			paramT = encParamType(param.Type)
 
 			// As the encoded parameter name is u8, it can hold up to 256 different names
 			// To keep on low communication overhead, we don't change this to u16
@@ -495,6 +564,504 @@ func (t *Tracee) initEventsParams() map[int32][]eventParam {
 	}
 
 	return eventsParams
+}
+
+// find "zygote" in /proc/pid/cmdline to get zygote pid
+// then iterate over its maps to get oat files base addresses
+// use these values to build a map of oat->base
+func (t *Tracee) initLibBases() error {
+	fmt.Printf("Extracting oat files and offsets from zygote process...\n")
+	d, err := os.Open("/proc")
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+
+	names, err := d.Readdirnames(-1)
+	if err != nil {
+		return fmt.Errorf("could not read %s: %s", d.Name(), err)
+	}
+
+	oatBase := make(map[string]uint64)
+	var oatExec []string
+	soBase := make(map[string]uint64)
+	var soExec []string
+
+	zygoteFound := false
+	zygote64Found := false
+	zygotePid := ""
+
+	for _, dirname := range names {
+		_, err := strconv.ParseInt(dirname, 10, 64)
+		if err != nil {
+			continue
+		}
+
+		cmdLinePath := "/proc/" + dirname + "/cmdline"
+		f, err := os.Open(cmdLinePath)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+
+		reader := io.LimitReader(f, 16)
+		data, err := ioutil.ReadAll(reader)
+		if err != nil {
+			continue
+		}
+
+		if len(data) < 1 {
+			continue
+		}
+
+		content := string(bytes.TrimRight(data, string("\x00")))
+		if content == "zygote64" {
+			zygote64Found = true
+			fmt.Printf("Found zygote64 pid: %s\n", dirname) // print zygote64 pid
+			zygotePid = dirname
+		}
+		if content == "zygote" {
+			zygoteFound = true
+			fmt.Printf("Found zygote pid: %s\n", dirname) // print zygote pid
+			// Prefer zygote64 over zygote
+			if !zygote64Found {
+				zygotePid = dirname
+			}
+		}
+	}
+
+	if !zygoteFound && !zygote64Found {
+		return fmt.Errorf("Failed to find zygote process")
+	}
+
+	mapsPath := "/proc/" + zygotePid + "/maps"
+	mapsFile, err := os.Open(mapsPath)
+	if err != nil {
+		return err
+	}
+	defer mapsFile.Close()
+
+	scanner := bufio.NewScanner(mapsFile)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasSuffix(line, ".oat") {
+			splitLine := strings.Fields(line)
+			startAddr, err := strconv.ParseUint(strings.Split(splitLine[0], "-")[0], 16, 64)
+			if err != nil {
+				return err
+			}
+			perms := splitLine[1]
+			filename := splitLine[5]
+			if base, ok := oatBase[filename]; ok {
+				if base > startAddr {
+					oatBase[filename] = startAddr
+				}
+			} else {
+				oatBase[filename] = startAddr
+			}
+			// check if executable
+			if strings.Contains(perms, "x") {
+				oatExec = append(oatExec, filename)
+			}
+		}
+
+		if strings.HasSuffix(line, ".so") {
+			splitLine := strings.Fields(line)
+			startAddrStr := strings.Split(splitLine[0], "-")[0]
+			startAddr, err := strconv.ParseUint(startAddrStr, 16, 64)
+			if err != nil {
+				return err
+			}
+			perms := splitLine[1]
+			filename := splitLine[5]
+			if base, ok := soBase[filename]; ok {
+				if base > startAddr {
+					soBase[filename] = startAddr
+				}
+			} else {
+				soBase[filename] = startAddr
+			}
+			// check if executable
+			if strings.Contains(perms, "x") {
+				soExec = append(soExec, filename)
+			}
+		}
+	}
+
+	for _, so := range soExec {
+		t.soBases[so] = soBase[so]
+	}
+
+	for _, oat := range oatExec {
+		t.oatBases[oat] = oatBase[oat]
+		oatdataOff := uint64(0x1000)
+		f, err := os.Open(oat)
+		if err != nil {
+			return fmt.Errorf("Failed to open oat %s elf: %v", oat, err)
+		}
+		elfFile, err := elf.NewFile(f)
+		if err != nil {
+			return fmt.Errorf("Failed to open oat %s elf: %v", oat, err)
+		}
+		symbols, err := elfFile.DynamicSymbols()
+		if err != nil {
+			return fmt.Errorf("Failed to get %s symbols: %v", oat, err)
+		}
+		for _, symbol := range symbols {
+			if symbol.Name == "oatdata" {
+				oatdataOff = symbol.Value
+				break
+			}
+		}
+		fmt.Printf("+ %s base: 0x%x, oatdata offset: 0x%x\n", oat, oatBase[oat], oatdataOff)
+		t.oatdataOffs[oat] = oatdataOff
+	}
+
+	return nil
+}
+
+func (t *Tracee) prepareApiUprobe(className string, methodName string, cachedApiHooks *[]hookDescriptor) error {
+	// search in cache first
+	cacheFound := false
+	for _, hook := range *cachedApiHooks {
+		if className == hook.ClassName && methodName == hook.Method {
+			t.apiHooks = append(t.apiHooks, hook)
+			cacheFound = true
+		}
+	}
+
+	if cacheFound {
+		return nil
+	}
+
+	// locate and set requested uprobes
+	found := false
+	ignore := true
+	var argsTypes []string
+	methodIdx := 0
+	argOff := -1
+	var addrOff uint64
+	var addrCount int
+	for oat, _ := range t.oatBases {
+		out, err := exec.Command("oatdump", "--no-disassemble",
+			"--oat-file="+oat, "--class-filter="+className,
+			"--method-filter="+methodName).Output()
+		if err != nil {
+			return fmt.Errorf("command execution failed: %s", err)
+		}
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, "dex_method_idx") {
+				ignore = true
+				argOff = -1
+				splitLine := strings.Split(line, methodName+"(")
+				if len(splitLine) < 2 {
+					// this can happen if methodName is a substring of current method
+					continue
+				}
+				trimedLine := splitLine[1]
+				typesStr := strings.Split(trimedLine, ")")[0]
+				argsTypes = strings.Split(typesStr, ", ")
+				splitLine = strings.Split(trimedLine, "idx=")
+				if len(splitLine) < 2 {
+					// This can only happen if oatdump format changed
+					fmt.Printf("Failed parsing oatdump output...\n")
+					continue
+				}
+				methodIdxStr := strings.Split(splitLine[1], ")")[0]
+				idx, err := strconv.ParseInt(methodIdxStr, 10, 32)
+				methodIdx = int(idx)
+				if err != nil {
+					return err
+				}
+				ignore = false
+			}
+			if strings.Contains(line, "code_offset:") {
+				if ignore {
+					continue
+				}
+				found = true
+				splitLine := strings.Split(line, "0x")
+				if len(splitLine) < 2 {
+					// This can only happen if oatdump format changed
+					fmt.Printf("Failed parsing oatdump output...\n")
+					continue
+				}
+				addrOffStr := strings.TrimSpace(splitLine[1])
+				addrOff, err = strconv.ParseUint(addrOffStr, 16, 64)
+				if err != nil {
+					return err
+				}
+				if addrOff != 0x0 {
+					// method offsets are realative to oatdata blob
+					addrOff += t.oatdataOffs[oat]
+					// set lsb to zero - relevant for arm arch. working with thumb
+					addrOff = (addrOff >> 1) << 1
+				}
+				addrCount = strings.Count(string(out), addrOffStr)
+			}
+			if strings.Contains(line, "ins:") {
+				if ignore {
+					continue
+				}
+				splitLine := strings.Split(line, "#")
+				firstArgOffStr := strings.Split(splitLine[1], "]")[0]
+				argOff, err = strconv.Atoi(firstArgOffStr)
+				if err != nil {
+					argOff = -1
+				}
+			}
+			if strings.Contains(line, "CODE: (code_offset") {
+				if ignore {
+					continue
+				}
+				// "CODE:..." should appear once at the output
+				hook := hookDescriptor{
+					Filename:   oat,
+					Offset:     addrOff,
+					ClassName:  className,
+					Method:     methodName,
+					ArgsTypes:  argsTypes,
+					ArgOff:     argOff,
+					MethodIdx:  methodIdx,
+					AddrCount:  addrCount,
+					UprobeType: "oat",
+				}
+
+				t.apiHooks = append(t.apiHooks, hook)
+				*cachedApiHooks = append(*cachedApiHooks, hook)
+				// clear argsTypes (should be initialized from dex_method_idx above)
+				argsTypes = nil
+				methodIdx = 0
+				addrOff = 0
+				addrCount = 0
+				ignore = true
+			}
+		}
+	}
+	if !found {
+		fmt.Printf("- Failed to find API function: %s.%s\n", className, methodName)
+	}
+
+	return nil
+}
+
+func (t *Tracee) setUprobe(hook hookDescriptor) error {
+	// as we are in android - all base addresses are known in advance
+	// use this fact to calculate the exact address of each function in memory
+	var addr uint64
+	if hook.UprobeType == "oat" {
+		addr = t.oatBases[hook.Filename] + hook.Offset
+	} else { // .so file
+		addr = t.soBases[hook.Filename] + hook.Offset
+	}
+	if _, ok := t.uprobesDesc[addr]; ok {
+		// this may occur if the same address is used multiple times
+		return fmt.Errorf("? Not setting uprobe: %s.%s(%s) \n    in file: %s, offset: 0x%x: Already attached!\n",
+			hook.ClassName, hook.Method, strings.Join(hook.ArgsTypes, ", "), hook.Filename, hook.Offset)
+	}
+
+	//save uprobe metadata to be used in events
+	t.uprobesDesc[addr] = hook
+
+	// get uprobe arguments types and encode in a single number
+	var argsTypes uint64
+	// var argsOff uint32
+
+	// if hook.UprobeType == "oat" {
+	// 	if hook.ArgOff >= 0 {
+	// 		fmt.Printf("%d\n", hook.ArgOff)
+	// 		argsOff = uint32(hook.ArgOff)
+	// 	} else {
+	// 		fmt.Printf("Warning: Function %s.%s arguments offset on stack is unknown. Assuming offset 8\n", hook.ClassName, hook.Method)
+	// 		argsOff = 8
+	// 	}
+	// }
+
+	for idx, argType := range hook.ArgsTypes {
+		if argType == "" || argType == " " {
+			continue
+		}
+		if idx > 5 {
+			fmt.Printf("Warning: Function %s.%s has too many parameters. Last parameters will be ignored\n", hook.ClassName, hook.Method)
+			break
+		}
+		argsTypes = argsTypes | (uint64(encParamType(argType)) << (8 * idx))
+	}
+	// set uprobe argument types
+	// use uprobe exact address for "types_map" so we can get the correct types in real time
+	paramsTypesBPFMap, _ := t.bpfModule.GetMap("types_map")
+	paramsTypesBPFMap.Update(addr, argsTypes)
+
+	if hook.UprobeType == "oat" {
+		// set uprobe arguments offset from stack frame pointer
+		// apiArgsOffBPFMap, _ := t.bpfModule.GetMap("api_args_off_map")
+		// apiArgsOffBPFMap.Update(addr, argsOff)
+
+		upEvent := fmt.Sprintf("%s.%s.%s", hook.ClassName, hook.Method, strings.Join(hook.ArgsTypes, "_"))
+		// for setting uprobes - we should keep the offset from .oat base address
+		fmt.Printf("+ %s.%s(%s) \n  in file: %s, offset: 0x%x\n",
+			hook.ClassName, hook.Method, strings.Join(hook.ArgsTypes, ", "), hook.Filename, hook.Offset)
+		prog, err := t.bpfModule.GetProgram("api_uprobe_ent_generic")
+		if err != nil {
+			return fmt.Errorf("error loading program api_uprobe_ent_generic: %v", err)
+		}
+		_, err = prog.AttachUprobeLegacy(upEvent, hook.Filename, hook.Offset)
+		if err != nil {
+			return fmt.Errorf("error attaching uprobe %s: %v", upEvent, err)
+		}
+	} else { // .so file
+		fmt.Printf("+ \"%s\" in file: %s, offset: 0x%x\n", hook.Method, hook.Filename, hook.Offset)
+		prog, err := t.bpfModule.GetProgram("func_trace_ent_generic")
+		if err != nil {
+			return fmt.Errorf("error loading program func_trace_ent_generic: %v", err)
+		}
+		_, err = prog.AttachUprobeLegacy(hook.Method, hook.Filename, hook.Offset)
+		if err != nil {
+			return fmt.Errorf("error attaching uprobe %s: %v", hook.Method, err)
+		}
+		prog, err = t.bpfModule.GetProgram("func_trace_ret_generic")
+		if err != nil {
+			return fmt.Errorf("error loading program func_trace_ret_generic: %v", err)
+		}
+		_, err = prog.AttachUretprobeLegacy(hook.Method, hook.Filename, hook.Offset)
+		if err != nil {
+			return fmt.Errorf("error attaching uprobe %s: %v", hook.Method, err)
+		}
+	}
+	return nil
+}
+
+func (t *Tracee) initHooks() error {
+	err := t.initLibBases()
+	if err != nil {
+		return err
+	}
+
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cachedAPIHooksPath := filepath.Join(filepath.Dir(exePath), "api_hooks.cache")
+	var cachedApiHooks []hookDescriptor
+	if _, err := os.Stat(cachedAPIHooksPath); err == nil {
+		hooksFile, err := ioutil.ReadFile(cachedAPIHooksPath)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Using cached hooks from %s\n", cachedAPIHooksPath)
+		json.Unmarshal(hooksFile, &cachedApiHooks)
+	}
+
+	// attaching lib uprobes
+	if len(t.config.LibHookConfigs) > 0 {
+		fmt.Printf("\nAttaching uprobes:\n")
+	}
+	for _, uprobe := range t.config.LibHookConfigs {
+		libPath := uprobe.LibPath
+		symName := uprobe.SymName
+		argsTypes := uprobe.ArgsTypes
+		// todo: validate args type by comparing to known supported type list
+		offset := uprobe.Offset
+		if _, ok := t.soBases[libPath]; !ok {
+			fmt.Printf("Failed setting uprobe: lib %s does not exist in zygote memory map!\n", libPath)
+			continue
+		}
+
+		var hook hookDescriptor
+		hook.Filename = libPath
+		if offset != "" {
+			hook.Offset, err = strconv.ParseUint(offset[2:], 16, 64)
+			if err != nil {
+				fmt.Printf("Failed setting uprobe: Invalid offset: %s\n", offset)
+				continue
+			}
+		} else {
+			hook.Offset = 0
+			f, err := os.Open(libPath)
+			if err != nil {
+				return fmt.Errorf("Failed to open %s elf: %v", libPath, err)
+			}
+			elfFile, err := elf.NewFile(f)
+			if err != nil {
+				return fmt.Errorf("Failed to open %s elf: %v", libPath, err)
+			}
+			symbols, err := elfFile.DynamicSymbols()
+			if err != nil {
+				return fmt.Errorf("Failed to get %s symbols: %v", libPath, err)
+			}
+			for _, symbol := range symbols {
+				if symbol.Name == symName {
+					hook.Offset = symbol.Value
+					break
+				}
+			}
+		}
+		hook.ClassName = ""
+		hook.Method = symName
+		hook.ArgsTypes = argsTypes
+		hook.MethodIdx = 0
+		hook.AddrCount = 1
+		hook.UprobeType = "so"
+		err = t.setUprobe(hook)
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		}
+	}
+
+	if len(t.config.ApiHookConfigs) > 0 {
+		fmt.Printf("\nAttaching Android API uprobes:\n")
+	}
+	// prepare api uprobes metadata (e.g. offset of method in file)
+	// full parsing should run only once per new environment (oat files didn't change)
+	if len(cachedApiHooks) == 0 {
+		fmt.Printf("Preparing hooks data from oat files (once), this may take a while...\n")
+	}
+	for _, apiHookConfig := range t.config.ApiHookConfigs {
+		className := apiHookConfig.ClassName
+		methodName := apiHookConfig.Method
+		err = t.prepareApiUprobe(className, methodName, &cachedApiHooks)
+		if err != nil {
+			fmt.Printf("Failed preparing API uprobe: %v\n", err)
+		}
+	}
+
+	// attaching api uprobes
+	for _, hook := range t.apiHooks {
+		if hook.Offset == 0x0 {
+			t.noCodeHooks = append(t.noCodeHooks, hook)
+			continue
+		}
+		// In oatdump, an address of a function has 3 occurences (this may change!)
+		if hook.AddrCount > 3 {
+			fmt.Printf("Warning: too many occurances (%d) of addr %x - multi usage?\n", hook.AddrCount, hook.Offset)
+		}
+
+		err = t.setUprobe(hook)
+		if err != nil {
+			fmt.Printf("%v\n", err)
+		}
+	}
+
+	// print failed because no compiled code exists
+	if len(t.noCodeHooks) > 0 {
+		fmt.Printf("\nFailed setting the following uprobes: No compiled code found!:\n")
+	}
+	for _, hook := range t.noCodeHooks {
+		fmt.Printf("- %s.%s(%s) \n    in file: %s\n",
+			hook.ClassName, hook.Method, strings.Join(hook.ArgsTypes, ", "), hook.Filename)
+	}
+
+	// save parsed hook for next execution - save in chrooted env.
+	_, err = os.Stat(cachedAPIHooksPath)
+	if len(t.apiHooks) > 0 && ((len(cachedApiHooks) < len(t.apiHooks)) || os.IsNotExist(err))  {
+		fileData, _ := json.MarshalIndent(cachedApiHooks, "", " ")
+		_ = ioutil.WriteFile(cachedAPIHooksPath, fileData, 0644)
+	}
+
+	return nil
 }
 
 func (t *Tracee) setUintFilter(filter *UintFilter, filterMapName string, configFilter bpfConfig, lessIdx uint32) error {
@@ -614,6 +1181,7 @@ func (t *Tracee) populateBPFMaps() error {
 		if chosen {
 			chosenEventsMap.Update(e, boolToUInt32(true))
 		}
+
 	}
 
 	sys32to64BPFMap, _ := t.bpfModule.GetMap("sys_32_to_64_map")
@@ -805,6 +1373,11 @@ func (t *Tracee) initBPF(bpfObjectPath string) error {
 	}
 
 	err = t.populateBPFMaps()
+	if err != nil {
+		return err
+	}
+
+	err = t.initHooks()
 	if err != nil {
 		return err
 	}
@@ -1211,6 +1784,28 @@ func (t *Tracee) prepareArgsForPrint(ctx *context, args map[argTag]interface{}) 
 	case BpfEventID:
 		if cmd, isInt32 := args[t.EncParamName[ctx.EventID%2]["cmd"]].(int32); isInt32 {
 			args[t.EncParamName[ctx.EventID%2]["cmd"]] = PrintBPFCmd(cmd)
+		}
+	case GenericUprobeEventID:
+		// uprobe_addr sent as first argument
+		uprobeOffTag := argTag(0)
+		if addr, isUint64 := args[uprobeOffTag].(uint64); isUint64 {
+			if _, ok := t.uprobesDesc[addr]; ok {
+				args[uprobeOffTag] = t.uprobesDesc[addr].Filename + ":" + t.uprobesDesc[addr].Method
+			} else {
+				val := args[uprobeOffTag]
+				args[uprobeOffTag] = fmt.Sprintf("0x%X", val)
+			}
+		}
+	case GenericApiUprobeEventID:
+		// uprobe_addr sent as first argument
+		uprobeOffTag := argTag(0)
+		if addr, isUint64 := args[uprobeOffTag].(uint64); isUint64 {
+			if _, ok := t.uprobesDesc[addr]; ok {
+				args[uprobeOffTag] = t.uprobesDesc[addr].ClassName + "." + t.uprobesDesc[addr].Method +  "(" + strings.Join(t.uprobesDesc[addr].ArgsTypes, ", ") + ")"
+			} else {
+				val := args[uprobeOffTag]
+				args[uprobeOffTag] = fmt.Sprintf("0x%X", val)
+			}
 		}
 	}
 

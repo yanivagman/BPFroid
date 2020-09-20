@@ -160,11 +160,129 @@ err_out:
     remove_kprobe_event(func_name, is_kretprobe);
     return NULL;
 }
+
+int poke_uprobe_events(bool add, const char* name, const char* path, unsigned long long offset, bool ret) {
+    char buf[256];
+    int fd, err;
+    char pr;
+
+    fd = open("/sys/kernel/debug/tracing/uprobe_events", O_WRONLY | O_APPEND, 0);
+    if (fd < 0) {
+        err = -errno;
+        fprintf(stderr, "failed to open uprobe_events file: %d\n", err);
+        return err;
+    }
+
+    pr = ret ? 'r' : 'p';
+
+    if (add)
+        snprintf(buf, sizeof(buf), "%c:uprobes/%c%s %s:0x%llx", pr, pr, name, path, offset);
+    else
+        snprintf(buf, sizeof(buf), "-:uprobes/%c%s", pr, name);
+
+    err = write(fd, buf, strlen(buf));
+    if (err < 0) {
+        err = -errno;
+        fprintf(
+            stderr,
+            "failed to %s uprobe '%s': %d\n",
+            add ? "add" : "remove",
+            buf,
+            err);
+    }
+    close(fd);
+    return err >= 0 ? 0 : err;
+}
+
+int add_uprobe_event(const char* func_name, const char* path, unsigned long long offset, bool is_uretprobe) {
+    return poke_uprobe_events(true, func_name, path, offset, is_uretprobe);
+}
+
+int remove_uprobe_event(const char* func_name, bool is_uretprobe) {
+    return poke_uprobe_events(false, func_name, NULL, 0, is_uretprobe);
+}
+
+struct bpf_link* attach_uprobe_legacy(
+    struct bpf_program* prog,
+    const char* func_name,
+    const char* path,
+    unsigned long long offset,
+    bool is_uretprobe) {
+    char fname[256];
+    struct perf_event_attr attr;
+    struct bpf_link* link;
+    int fd = -1, err, id;
+    FILE* f = NULL;
+    char pr;
+
+    err = add_uprobe_event(func_name, path, offset, is_uretprobe);
+    if (err) {
+        fprintf(stderr, "failed to create uprobe event: %d\n", err);
+        return NULL;
+    }
+
+	pr = is_uretprobe ? 'r' : 'p';
+
+    snprintf(
+        fname,
+        sizeof(fname),
+        "/sys/kernel/debug/tracing/events/uprobes/%c%s/id",
+        pr, func_name);
+    f = fopen(fname, "r");
+    if (!f) {
+        fprintf(stderr, "failed to open uprobe id file '%s': %d\n", fname, -errno);
+        goto err_out;
+    }
+
+    if (fscanf(f, "%d\n", &id) != 1) {
+        fprintf(stderr, "failed to read uprobe id from '%s': %d\n", fname, -errno);
+        goto err_out;
+    }
+
+    fclose(f);
+    f = NULL;
+
+    memset(&attr, 0, sizeof(attr));
+    attr.size = sizeof(attr);
+    attr.config = id;
+    attr.type = PERF_TYPE_TRACEPOINT;
+    attr.sample_period = 1;
+    attr.wakeup_events = 1;
+
+    fd = syscall(__NR_perf_event_open, &attr, -1, 0, -1, PERF_FLAG_FD_CLOEXEC);
+    if (fd < 0) {
+        fprintf(
+            stderr,
+            "failed to create perf event for uprobe ID %d: %d\n",
+            id,
+            -errno);
+        goto err_out;
+    }
+
+    link = bpf_program__attach_perf_event(prog, fd);
+    err = libbpf_get_error(link);
+    if (err) {
+        fprintf(stderr, "failed to attach to perf event FD %d: %d\n", fd, err);
+        goto err_out;
+    }
+
+    return link;
+
+err_out:
+    if (f)
+        fclose(f);
+    if (fd >= 0)
+        close(fd);
+    remove_uprobe_event(func_name, is_uretprobe);
+    return NULL;
+}
 */
 import "C"
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -197,6 +315,8 @@ const (
 	Kretprobe
 	KprobeLegacy
 	KretprobeLegacy
+	UprobeLegacy
+	UretprobeLegacy
 )
 
 type BPFLink struct {
@@ -272,6 +392,16 @@ func (m *Module) Close() {
 		if link.linkType == KretprobeLegacy {
 			cs := C.CString(link.eventName)
 			C.remove_kprobe_event(cs, true)
+			C.free(unsafe.Pointer(cs))
+		}
+		if link.linkType == UprobeLegacy {
+			cs := C.CString(link.eventName)
+			C.remove_uprobe_event(cs, false)
+			C.free(unsafe.Pointer(cs))
+		}
+		if link.linkType == UretprobeLegacy {
+			cs := C.CString(link.eventName)
+			C.remove_uprobe_event(cs, true)
 			C.free(unsafe.Pointer(cs))
 		}
 	}
@@ -588,6 +718,55 @@ func doAttachKprobeLegacy(prog *BPFProg, kp string, isKretprobe bool) (*BPFLink,
 		prog:      prog,
 		linkType:  kpType,
 		eventName: kp,
+	}
+	prog.module.links = append(prog.module.links, bpfLink)
+	return bpfLink, nil
+}
+
+var upRegexp = regexp.MustCompile("[^a-zA-Z0-9]")
+var upCount = 0
+
+func (p *BPFProg) AttachUprobeLegacy(up, path string, offset uint64) (*BPFLink, error) {
+	// size of up+path+offset shouldn't exceed 255 - limit event name length
+	if len(up) > 64 {
+		up = up[0:64]
+	}
+	up = up + strconv.Itoa(upCount)
+	upCount++
+	return doAttachUprobeLegacy(p, upRegexp.ReplaceAllString(up, "_"), path, offset, false)
+}
+
+func (p *BPFProg) AttachUretprobeLegacy(up, path string, offset uint64) (*BPFLink, error) {
+	if len(up) > 64 {
+		up = up[0:64]
+	}
+	up = up + strconv.Itoa(upCount)
+	upCount++
+	return doAttachUprobeLegacy(p, upRegexp.ReplaceAllString(up, "_"), path, offset, true)
+}
+
+func doAttachUprobeLegacy(prog *BPFProg, up, path string, offset uint64, isUretprobe bool) (*BPFLink, error) {
+	upCs := C.CString(up)
+	pathCs := C.CString(path)
+	offC := C.ulonglong(offset)
+	cbool := C.bool(isUretprobe)
+	link := C.attach_uprobe_legacy(prog.prog, upCs, pathCs, offC, cbool)
+	C.free(unsafe.Pointer(upCs))
+	C.free(unsafe.Pointer(pathCs))
+	if link == nil {
+		return nil, fmt.Errorf("failed to attach %s u(ret)probe using legacy debugfs API", up)
+	}
+
+	upType := UprobeLegacy
+	if isUretprobe {
+		upType = UretprobeLegacy
+	}
+
+	bpfLink := &BPFLink{
+		link:      link,
+		prog:      prog,
+		linkType:  upType,
+		eventName: up,
 	}
 	prog.module.links = append(prog.module.links, bpfLink)
 	return bpfLink, nil

@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -40,10 +41,47 @@ func main() {
 				return nil
 			}
 
+			// ==================== Android specific code start ======================
+			exePath, err := os.Executable()
+			if err != nil {
+				return err
+			}
+			jsonFile, err := ioutil.ReadFile(filepath.Join(filepath.Dir(exePath), "hooks.json"))
+			if err != nil {
+				return err
+			}
+
+			var bpfroidConf tracee.BpfroidConfig
+
+			err = json.Unmarshal([]byte(jsonFile), &bpfroidConf)
+			if err != nil {
+				return fmt.Errorf("error:", err)
+			}
+			hookConfigs := bpfroidConf.HookConfigs
+			apiHookConfigs := hookConfigs.Api
+			syscallHookConfigs := hookConfigs.Syscalls
+			kprobeConfigs := hookConfigs.Kprobes
+			libHookConfigs := hookConfigs.Uprobes
+
+			extendedTrace := c.StringSlice("trace")
+			for _, sc := range syscallHookConfigs {
+				extendedTrace = append(extendedTrace, "e=" + sc.Name)
+			}
+			for _, kp := range kprobeConfigs {
+				extendedTrace = append(extendedTrace, "e=" + kp.Name)
+			}
+
+			// Add generic_uprobe event
+			extendedTrace = append(extendedTrace, "e=generic_uprobe")
+			extendedTrace = append(extendedTrace, "e=generic_api_uprobe")
+			// ==================== Android specific code end ========================
+
 			cfg := tracee.TraceeConfig{
 				PerfBufferSize:     c.Int("perf-buffer-size"),
 				BlobPerfBufferSize: c.Int("blob-perf-buffer-size"),
 				SecurityAlerts:     c.Bool("security-alerts"),
+				ApiHookConfigs:     apiHookConfigs,
+				LibHookConfigs:     libHookConfigs,
 			}
 			output, err := prepareOutput(c.StringSlice("output"))
 			if err != nil {
@@ -55,7 +93,7 @@ func main() {
 				return err
 			}
 			cfg.Capture = &capture
-			filter, err := prepareFilter(c.StringSlice("trace"))
+			filter, err := prepareFilter(extendedTrace)
 			if err != nil {
 				return err
 			}
@@ -235,7 +273,7 @@ Use this flag multiple times to choose multiple capture options
 
 	capture := tracee.CaptureConfig{}
 
-	outDir := "/tmp/tracee"
+	outDir := "/data/local/tmp"
 	clearDir := false
 
 	var filterFileWrite []string
@@ -945,7 +983,7 @@ func getBPFObject() (string, error) {
 		}
 		return bpfPath, nil
 	}
-	bpfObjFileName := fmt.Sprintf("tracee.bpf.%s.%s.o", strings.ReplaceAll(tracee.UnameRelease(), ".", "_"), strings.ReplaceAll(version, ".", "_"))
+	bpfObjFileName := fmt.Sprintf("tracee.bpf.%s.o", strings.ReplaceAll(version, ".", "_"))
 	exePath, err := os.Executable()
 	if err != nil {
 		return "", err

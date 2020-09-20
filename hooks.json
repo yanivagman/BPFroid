@@ -1,0 +1,38 @@
+{
+    "hookConfigs": {
+        "api": [
+            {
+                "class_name": "android.telephony.TelephonyManager",
+                "method": "getDeviceId"
+            }
+        ],
+        "syscalls": [
+            {
+                "name": "kill"
+            },
+            {
+                "name": "connect"
+            },
+            {
+                "name": "listen"
+            }
+        ],
+        "kprobes": [
+            {
+                "name": "security_file_open"
+            },
+            {
+                "name": "security_bprm_check"
+            }
+        ],
+        "uprobes": [
+            {
+                "lib_path": "/system/lib64/liblog.so",
+                "sym_name": "android_log_write_string8_len",
+                "offset": "",
+                "args_types": [ "void*", "char*", "size_t" ]
+            }
+        ]
+    },
+    "trace": true
+}

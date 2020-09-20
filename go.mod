@@ -8,3 +8,5 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20180916011248-d98352740cb2
 	github.com/urfave/cli/v2 v2.1.1
 )
+
+replace github.com/aquasecurity/tracee/libbpfgo => ./libbpfgo

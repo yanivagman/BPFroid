@@ -72,7 +72,11 @@ func (t *Tracee) decodeRawEvent(done <-chan struct{}) (<-chan RawEvent, <-chan e
 					continue
 				}
 				argsTags[i] = tag
-				rawArgs[tag] = val
+				if ctx.EventID == GenericUprobeEventID || ctx.EventID == GenericApiUprobeEventID {
+					rawArgs[argTag(i)] = val
+				} else {
+					rawArgs[tag] = val
+				}
 			}
 			select {
 			case out <- RawEvent{ctx, rawArgs, argsTags}:
@@ -156,14 +160,25 @@ func (t *Tracee) prepareEventForPrint(done <-chan struct{}, in <-chan RawEvent) 
 			}
 			args := make([]interface{}, rawEvent.Ctx.Argnum)
 			argMetas := make([]external.ArgMeta, rawEvent.Ctx.Argnum)
-			for i, tag := range rawEvent.ArgsTags {
-				args[i] = rawEvent.RawArgs[tag]
-				argMeta, ok := t.DecParamName[rawEvent.Ctx.EventID%2][tag]
-				if ok {
-					argMetas[i] = argMeta
-				} else {
-					errc <- fmt.Errorf("Invalid arg tag for event %d", rawEvent.Ctx.EventID)
-					continue
+			if rawEvent.Ctx.EventID == GenericUprobeEventID || rawEvent.Ctx.EventID == GenericApiUprobeEventID {
+				for i, _ := range rawEvent.ArgsTags {
+					args[i] = rawEvent.RawArgs[argTag(i)]
+					if i == 0 {
+						argMetas[i] = external.ArgMeta{Type: "char*", Name: "fn"}
+						continue
+					}
+					argMetas[i] = external.ArgMeta{Type: "char*", Name: fmt.Sprintf("arg%d", i)}
+				}
+			} else {
+				for i, tag := range rawEvent.ArgsTags {
+					args[i] = rawEvent.RawArgs[tag]
+					argMeta, ok := t.DecParamName[rawEvent.Ctx.EventID%2][tag]
+					if ok {
+						argMetas[i] = argMeta
+					} else {
+						errc <- fmt.Errorf("Invalid arg tag for event %d\n", rawEvent.Ctx.EventID)
+						continue
+					}
 				}
 			}
 

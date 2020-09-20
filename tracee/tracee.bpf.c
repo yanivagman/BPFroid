@@ -128,7 +128,9 @@
 #define VFS_WRITEV            1008
 #define MEM_PROT_ALERT        1009
 #define SCHED_PROCESS_EXIT    1010
-#define MAX_EVENT_ID          1011
+#define GENERIC_UPROBE        1011
+#define GENERIC_API_UPROBE    1012
+#define MAX_EVENT_ID          1013
 
 #define CONFIG_SHOW_SYSCALL         1
 #define CONFIG_EXEC_ENV             2
@@ -320,6 +322,9 @@ BPF_PROG_ARRAY(sys_enter_tails, MAX_EVENT_ID);          // Used to store program
 BPF_PROG_ARRAY(sys_exit_tails, MAX_EVENT_ID);           // Used to store programs for tail calls
 BPF_STACK_TRACE(stack_addresses, MAX_STACK_ADDRESSES);  // Used to store stack traces
 
+BPF_HASH(types_map, u64, u64);                      // Argument types of generic event handlers
+BPF_HASH(uprobe_off_map, u64, u64);                 // Save uprobe offset to be used in uretprobe
+
 /*================================== EVENTS ====================================*/
 
 BPF_PERF_OUTPUT(events);                            // Events submission
@@ -502,6 +507,16 @@ static inline struct mount *real_mount(struct vfsmount *mnt)
 }
 
 /*============================== HELPER FUNCTIONS ==============================*/
+
+static __always_inline u64 get_handler_types(u64 key)
+{
+    u64 *types = bpf_map_lookup_elem(&types_map, &key);
+
+    if (types == NULL)
+        return 0;
+
+    return *types;
+}
 
 static __inline int has_prefix(char *prefix, char *str, int n)
 {
@@ -1622,6 +1637,110 @@ int syscall__execveat(void *ctx)
 
     context.argnum = argnum;
     save_context_to_buf(submit_p, (void*)&context);
+    events_perf_submit(ctx);
+    return 0;
+}
+
+/*============================== UPROBES HOOKS ==============================*/
+
+SEC("uprobe/api_uprobe_ent")
+int api_uprobe_ent_generic(struct pt_regs *ctx)
+{
+    if (!should_trace())
+        return 0;
+
+    buf_t *submit_p = get_buf(SUBMIT_BUF_IDX);
+    if (submit_p == NULL)
+        return 0;
+    set_buf_off(SUBMIT_BUF_IDX, sizeof(context_t));
+
+    u64 uprobe_off = PT_REGS_IP(ctx);
+    //bpf_trace_printk("%llx\n", uprobe_off);
+
+    // save uprobe_off so userspace can know which uprobe was called
+    save_to_submit_buf(submit_p, (void*)&uprobe_off, sizeof(unsigned long), ULONG_T, 0);
+    u8 argnum = 1;
+
+
+/*
+// API uprobes are not supported yet, as this requires composing java classes from memory
+    u64 *types_p = bpf_map_lookup_elem(&types_map, &uprobe_off);
+    if (types_p == NULL)
+        return 0;
+    u64 types = *types_p;
+
+    u32 args_off = 8;
+
+    #pragma unroll
+    for (int i = 0; i < 6; i++) {
+        void *arg_p = (void *)(READ_KERN(ctx->sp) + args_off);
+        u8 type = DEC_ARG(i, types);
+        u8 type_size = 4;
+        if (type != NONE_T)
+            argnum += save_to_submit_buf(submit_p, arg_p, type_size, UINT_T, 0);
+        args_off += type_size;
+    }
+*/
+    init_and_save_context(ctx, submit_p, GENERIC_API_UPROBE, argnum, 0);
+
+    events_perf_submit(ctx);
+    return 0;
+}
+
+SEC("uprobe/func_uprobe_ent")
+int func_trace_ent_generic(struct pt_regs *ctx)
+{
+    if (!should_trace())
+        return 0;
+
+    save_args_from_regs(ctx, GENERIC_UPROBE, false);
+    u64 uprobe_off = PT_REGS_IP(ctx);
+    //bpf_trace_printk("%llx\n", uprobe_off);
+
+    u64 id = bpf_get_current_pid_tgid();
+    bpf_map_update_elem(&uprobe_off_map, &id, &uprobe_off, BPF_ANY);
+    return 0;
+}
+
+SEC("uprobe/func_uprobe_ret")
+int func_trace_ret_generic(struct pt_regs *ctx)
+{
+    args_t args = {};
+    u64 *off_p;
+    u64 uprobe_off;
+    u64 id = bpf_get_current_pid_tgid();
+
+    off_p = bpf_map_lookup_elem(&uprobe_off_map, &id);
+    if (off_p == 0) {
+        return -1;
+    }
+
+    bpf_map_delete_elem(&uprobe_off_map, &id);
+
+    uprobe_off = *off_p;
+
+    if (!should_trace())
+        return 0;
+
+    u64 *types_p = bpf_map_lookup_elem(&types_map, &uprobe_off);
+    if (types_p == NULL)
+        return 0;
+    u64 types = *types_p;
+
+    bool delete_args = true;
+    if (load_args(&args, delete_args, GENERIC_UPROBE) != 0)
+        return 0;
+
+    buf_t *submit_p = get_buf(SUBMIT_BUF_IDX);
+    if (submit_p == NULL)
+        return 0;
+    set_buf_off(SUBMIT_BUF_IDX, sizeof(context_t));
+
+    // save uprobe_off so userspace can know which uprobe was called
+    save_to_submit_buf(submit_p, &uprobe_off, sizeof(unsigned long), ULONG_T, 0);
+    u8 argnum = save_args_to_submit_buf(types, types, &args) + 1;
+    init_and_save_context(ctx, submit_p, GENERIC_UPROBE, argnum, PT_REGS_RC(ctx));
+
     events_perf_submit(ctx);
     return 0;
 }

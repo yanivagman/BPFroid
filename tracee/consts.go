@@ -117,6 +117,7 @@ const (
 	kretprobe
 	tracepoint
 	rawTracepoint
+	uprobe
 )
 
 type probe struct {
@@ -149,6 +150,8 @@ const (
 	VfsWritevEventID
 	MemProtAlertEventID
 	SchedProcessExitEventID
+	GenericUprobeEventID
+	GenericApiUprobeEventID
 	MaxEventID
 )
 
@@ -518,6 +521,8 @@ var EventsIDToEvent = map[int32]EventConfig{
 	VfsWritevEventID:           {ID: VfsWritevEventID, ID32Bit: sys32undefined, Name: "vfs_writev", Probes: []probe{{event: "vfs_writev", attach: kprobe, fn: "trace_vfs_writev"}, {event: "vfs_writev", attach: kretprobe, fn: "trace_ret_vfs_writev"}}, Sets: []string{}},
 	MemProtAlertEventID:        {ID: MemProtAlertEventID, ID32Bit: sys32undefined, Name: "mem_prot_alert", Probes: []probe{{event: "security_mmap_addr", attach: kprobe, fn: "trace_mmap_alert"}, {event: "security_file_mprotect", attach: kprobe, fn: "trace_mprotect_alert"}}, Sets: []string{}},
 	SchedProcessExitEventID:    {ID: SchedProcessExitEventID, ID32Bit: sys32undefined, Name: "sched_process_exit", Probes: []probe{{event: "sched:sched_process_exit", attach: rawTracepoint, fn: "tracepoint__sched__sched_process_exit"}}, EssentialEvent: true, Sets: []string{"default", "proc", "proc_life"}},
+	GenericUprobeEventID:       {ID: GenericUprobeEventID, ID32Bit: sys32undefined, Name: "generic_uprobe", Probes: []probe{}, Sets: []string{}},
+	GenericApiUprobeEventID:    {ID: GenericApiUprobeEventID, ID32Bit: sys32undefined, Name: "generic_api_uprobe", Probes: []probe{}, Sets: []string{}},
 }
 
 // EventsIDToParams is list of the parameters (name and type) used by the events
