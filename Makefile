@@ -14,6 +14,7 @@ ARCH_UNAME := $(shell uname -m)
 ARCH ?= $(ARCH_UNAME:aarch64=arm64)
 KERN_RELEASE ?= $(shell uname -r)
 #KERN_HEADERS := /home/yaniv/src/thesis/android-kernel/goldfish
+#KERN_HEADERS := /home/yaniv/src/thesis/pixel3a/android-kernel/headers/kernel-headers
 KERN_BLD_PATH ?= $(if $(KERN_HEADERS),$(KERN_HEADERS),/lib/modules/$(KERN_RELEASE)/build)
 KERN_SRC_PATH ?= $(if $(KERN_HEADERS),$(KERN_HEADERS),$(if $(wildcard /lib/modules/$(KERN_RELEASE)/source),/lib/modules/$(KERN_RELEASE)/source,$(KERN_BLD_PATH)))
 VERSION ?= $(if $(RELEASE_TAG),$(RELEASE_TAG),$(shell $(CMD_GIT) describe --tags))

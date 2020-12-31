@@ -213,8 +213,8 @@ struct bpf_map_def SEC("maps") _name = { \
 #endif
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
-#error Minimal required kernel version is 4.14
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0)
+#error Minimal required kernel version is 4.9
 #endif
 
 /*=============================== INTERNAL STRUCTS ===========================*/
@@ -1984,6 +1984,10 @@ int BPF_KPROBE(send_bin)
     // 2. We can have multiple cpus - need percpu array
     // 3. We have to use perf submit and not maps as data can be overriden if userspace doesn't consume it fast enough
 
+#if defined(bpf_target_arm64)
+       return 0;
+#endif
+
     int i = 0;
     unsigned int chunk_size;
     u64 id = bpf_get_current_pid_tgid();
@@ -2097,6 +2101,10 @@ static __always_inline int do_vfs_write_writev(struct pt_regs *ctx, u32 event_id
     bool has_filter = false;
     bool filter_match = false;
 
+#if defined(bpf_target_arm64)
+       return 0;
+#endif
+
     bool delete_args = false;
     if (load_args(&saved_args, delete_args, event_id) != 0) {
         // missed entry or not traced
@@ -2205,6 +2213,10 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
     size_t count;
     struct iovec *vec;
     unsigned long vlen;
+
+#if defined(bpf_target_arm64)
+       return 0;
+#endif
 
     buf_t *submit_p = get_buf(SUBMIT_BUF_IDX);
     if (submit_p == NULL)
