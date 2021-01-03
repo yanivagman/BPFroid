@@ -38,12 +38,6 @@
                 "type": "fingerprint"
             },
             {
-                "class_name": "android.net.wifi.WifiInfo",
-                "method": "getMacAddress",
-                "thisObject": false,
-                "type": "fingerprint"
-            },
-            {
                 "class_name": "android.telephony.TelephonyManager",
                 "method": "getSimCountryIso",
                 "thisObject": false,
@@ -64,6 +58,12 @@
             {
                 "class_name": "android.telephony.TelephonyManager",
                 "method": "getDeviceSoftwareVersion",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.net.wifi.WifiInfo",
+                "method": "getMacAddress",
                 "thisObject": false,
                 "type": "fingerprint"
             },
@@ -104,18 +104,6 @@
                 "type": "globals"
             },
             {
-                "class_name": "android.content.ContentValues",
-                "method": "put",
-                "thisObject": false,
-                "type": "globals"
-            },
-            {
-                "class_name": "java.net.URL",
-                "method": "openConnection",
-                "thisObject": true,
-                "type": "network"
-            },
-            {
                 "class_name": "org.apache.http.impl.client.AbstractHttpClient",
                 "method": "execute",
                 "thisObject": false,
@@ -141,25 +129,13 @@
             },
             {
                 "class_name": "dalvik.system.BaseDexClassLoader",
-                "method": "findResource",
+                "method": "findClass",
                 "thisObject": false,
                 "type": "dex"
             },
             {
                 "class_name": "dalvik.system.BaseDexClassLoader",
-                "method": "findLibrary",
-                "thisObject": false,
-                "type": "dex"
-            },
-            {
-                "class_name": "dalvik.system.DexFile",
-                "method": "loadDex",
-                "thisObject": false,
-                "type": "dex"
-            },
-            {
-                "class_name": "dalvik.system.DexClassLoader",
-                "method": "load",
+                "method": "findResource",
                 "thisObject": false,
                 "type": "dex"
             },
@@ -170,22 +146,28 @@
                 "type": "dex"
             },
             {
-                "class_name": "dalvik.system.DexFile",
+                "class_name": "dalvik.system.BaseDexClassLoader",
+                "method": "findLibrary",
+                "thisObject": false,
+                "type": "dex"
+            },
+            {
+                "class_name": "java.lang.ClassLoader",
                 "method": "loadClass",
                 "thisObject": false,
                 "type": "dex"
             },
             {
-                "class_name": "javax.crypto.Cipher",
-                "method": "doFinal",
-                "thisObject": true,
-                "type": "crypto"
+                "class_name": "dalvik.system.DexFile",
+                "method": "loadDex",
+                "thisObject": false,
+                "type": "dex"
             },
             {
-                "class_name": "javax.crypto.Mac",
-                "method": "doFinal",
+                "class_name": "dalvik.system.DexFile",
+                "method": "loadClass",
                 "thisObject": false,
-                "type": "crypto"
+                "type": "dex"
             },
             {
                 "class_name": "android.app.ApplicationPackageManager",
@@ -248,38 +230,8 @@
                 "type": "sms"
             },
             {
-                "class_name": "java.lang.Runtime",
-                "method": "exec",
-                "thisObject": false,
-                "type": "runtime"
-            },
-            {
-                "class_name": "java.lang.ProcessBuilder",
-                "method": "start",
-                "thisObject": true,
-                "type": "runtime"
-            },
-            {
-                "class_name": "java.io.FileOutputStream",
-                "method": "write",
-                "thisObject": false,
-                "type": "runtime"
-            },
-            {
-                "class_name": "java.io.FileInputStream",
-                "method": "read",
-                "thisObject": false,
-                "type": "runtime"
-            },
-            {
                 "class_name": "android.app.ActivityManager",
                 "method": "killBackgroundProcesses",
-                "thisObject": false,
-                "type": "runtime"
-            },
-            {
-                "class_name": "android.os.Process",
-                "method": "killProcess",
                 "thisObject": false,
                 "type": "runtime"
             },
@@ -350,18 +302,6 @@
                 "type": "content"
             },
             {
-                "class_name": "libcore.io.IoBridge",
-                "method": "open",
-                "thisObject": false,
-                "type": "file"
-            },
-            {
-                "class_name": "libcore.io.IoBridge",
-                "method": "close",
-                "thisObject": true,
-                "type": "file"
-            },
-            {
                 "class_name": "android.app.ActivityManager",
                 "method": "getRunningAppProcesses",
                 "thisObject": false,
@@ -384,12 +324,6 @@
                 "method": "load",
                 "thisObject": false,
                 "type": "dex"
-            },
-            {
-                "class_name": "android.os.Process",
-                "method": "start",
-                "thisObject": false,
-                "type": "runtime"
             },
             {
                 "class_name": "android.content.ContextWrapper",
@@ -428,30 +362,6 @@
                 "type": "generic"
             },
             {
-                "class_name": "android.webkit.WebView",
-                "method": "addJavascriptInterface",
-                "thisObject": false,
-                "type": "network"
-            },
-            {
-                "class_name": "android.webkit.WebView",
-                "method": "setWebChromeClient",
-                "thisObject": false,
-                "type": "network"
-            },
-            {
-                "class_name": "android.webkit.WebView",
-                "method": "setWebViewClient",
-                "thisObject": false,
-                "type": "network"
-            },
-            {
-                "class_name": "android.content.ContextWrapper",
-                "method": "openFileOutput",
-                "thisObject": false,
-                "type": "file"
-            },
-            {
                 "class_name": "android.app.AlarmManager",
                 "method": "setAlarmClock",
                 "thisObject": false,
@@ -461,13 +371,7 @@
                 "class_name": "android.app.AlarmManager",
                 "method": "set",
                 "thisObject": false,
-                "type": "file"
-            },
-            {
-                "class_name": "java.io.File",
-                "method": "exists",
-                "thisObject": true,
-                "type": "file"
+                "type": "runtime"
             },
             {
                 "class_name": "android.view.View",
@@ -494,70 +398,16 @@
                 "type": "generic"
             },
             {
-                "class_name": "android.provider.Settings.Secure",
-                "method": "getString",
-                "thisObject": false,
-                "type": "fingerprint"
-            },
-            {
                 "class_name": "android.content.res.AssetManager",
                 "method": "open",
                 "thisObject": false,
                 "type": "file"
             },
             {
-                "class_name": "javax.crypto.Cipher",
-                "method": "update",
+                "class_name": "android.content.res.AssetManager",
+                "method": "openNonAssetFd",
                 "thisObject": false,
-                "type": "crypto"
-            },
-            {
-                "class_name": "net.sqlcipher.database.SQLiteDatabase",
-                "method": "openDatabase",
-                "thisObject": false,
-                "type": "crypto"
-            },
-            {
-                "class_name": "android.database.sqlite.SQLiteDatabase",
-                "method": "insert",
-                "thisObject": false,
-                "type": "generic"
-            },
-            {
-                "class_name": "android.database.sqlite.SQLiteDatabase",
-                "method": "query",
-                "thisObject": false,
-                "type": "generic"
-            },
-            {
-                "class_name": "android.database.sqlite.SQLiteDatabase",
-                "method": "create",
-                "thisObject": false,
-                "type": "generic"
-            },
-            {
-                "class_name": "android.util.Log",
-                "method": "d",
-                "thisObject": false,
-                "type": "binder"
-            },
-            {
-                "class_name": "android.util.Log",
-                "method": "e",
-                "thisObject": false,
-                "type": "binder"
-            },
-            {
-                "class_name": "java.io.PrintStream",
-                "method": "println",
-                "thisObject": false,
-                "type": "binder"
-            },
-            {
-                "class_name": "android.webkit.WebView",
-                "method": "loadUrl",
-                "thisObject": false,
-                "type": "network"
+                "type": "file"
             },
             {
                 "class_name": "android.app.ContextImpl",
@@ -590,18 +440,6 @@
                 "type": "binder"
             },
             {
-                "class_name": "android.database.sqlite.SQLiteCursor",
-                "method": "getString",
-                "thisObject": true,
-                "type": "generic"
-            },
-            {
-                "class_name": "android.content.res.AssetManager",
-                "method": "openNonAssetFd",
-                "thisObject": false,
-                "type": "file"
-            },
-            {
                 "class_name": "android.app.AppOpsManager",
                 "method": "checkOpNoThrow",
                 "thisObject": false,
@@ -612,6 +450,50 @@
                 "method": "newProxyInstance",
                 "thisObject": false,
                 "type": "binder"
+            }
+        ],
+        "uprobes": [
+            {
+                "lib_path": "/system/lib64/liblog.so",
+                "sym_name": "android_log_write_string8",
+                "offset": "",
+                "args_types": [ "void*", "char*" ]
+            },
+            {
+                "lib_path": "/system/lib64/liblog.so",
+                "sym_name": "android_log_write_string8_len",
+                "offset": "",
+                "args_types": [ "void*", "char*", "size_t" ]
+            },
+            {
+                "lib_path": "/system/lib64/liblog.so",
+                "sym_name": "create_android_log_parser",
+                "offset": "",
+                "args_types": [ "char*", "size_t" ]
+            },
+            {
+                "lib_path": "/apex/com.android.runtime/lib64/bionic/libc.so",
+                "sym_name": "printf",
+                "offset": "",
+                "args_types": [ "char*" ]
+            },
+            {
+                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
+                "sym_name": "dlsym",
+                "offset": "",
+                "args_types": [ "void*", "char*" ]
+            },
+            {
+                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
+                "sym_name": "dlopen",
+                "offset": "",
+                "args_types": [ "char*", "int" ]
+            },
+            {
+                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl_android.so",
+                "sym_name": "android_dlopen_ext",
+                "offset": "",
+                "args_types": [ "char*", "int" ]
             }
         ],
         "syscalls": [
@@ -712,6 +594,12 @@
                 "name": "kill"
             },
             {
+                "name": "tkill"
+            },
+            {
+                "name": "tgkill"
+            },
+            {
                 "name": "mknod"
             },
             {
@@ -763,56 +651,6 @@
             },
             {
                 "name": "security_bprm_check"
-            }
-        ],
-        "uprobes": [
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/libart.so",
-                "sym_name": "_ZN3artL25DexFile_openDex",
-                "offset": "0x496a00",
-                "args_types": [ "char*", "int" ]
-            },
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libc.so",
-                "sym_name": "printf",
-                "offset": "",
-                "args_types": [ "char*" ]
-            },
-            {
-                "lib_path": "/system/lib64/liblog.so",
-                "sym_name": "android_log_write_string8_len",
-                "offset": "",
-                "args_types": [ "void*", "char*", "size_t" ]
-            },
-            {
-                "lib_path": "/system/lib64/liblog.so",
-                "sym_name": "create_android_log_parser",
-                "offset": "",
-                "args_types": [ "char*", "size_t" ]
-            },
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libc.so",
-                "sym_name": "access",
-                "offset": "",
-                "args_types": [ "char*", "int" ]
-            },
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
-                "sym_name": "dlsym",
-                "offset": "",
-                "args_types": [ "void*", "char*" ]
-            },
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
-                "sym_name": "dlopen",
-                "offset": "",
-                "args_types": [ "char*", "int" ]
-            },
-            {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl_android.so",
-                "sym_name": "android_dlopen_ext",
-                "offset": "",
-                "args_types": [ "char*", "int" ]
             }
         ]
     },
