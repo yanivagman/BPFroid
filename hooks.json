@@ -9,6 +9,18 @@
             },
             {
                 "class_name": "android.telephony.TelephonyManager",
+                "method": "getImei",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.telephony.TelephonyManager",
+                "method": "getMeid",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.telephony.TelephonyManager",
                 "method": "getSubscriberId",
                 "thisObject": false,
                 "type": "fingerprint"
@@ -58,6 +70,24 @@
             {
                 "class_name": "android.telephony.TelephonyManager",
                 "method": "getDeviceSoftwareVersion",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.telephony.TelephonyManager",
+                "method": "getCallState",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.telephony.TelephonyManager",
+                "method": "getCellLocation",
+                "thisObject": false,
+                "type": "fingerprint"
+            },
+            {
+                "class_name": "android.telephony.TelephonyManager",
+                "method": "getAllCellInfo",
                 "thisObject": false,
                 "type": "fingerprint"
             },
@@ -302,6 +332,12 @@
                 "type": "content"
             },
             {
+                "class_name": "android.content.pm",
+                "method": "getInstalledApplications",
+                "thisObject": false,
+                "type": "content"
+            },
+            {
                 "class_name": "android.app.ActivityManager",
                 "method": "getRunningAppProcesses",
                 "thisObject": false,
@@ -448,6 +484,18 @@
             {
                 "class_name": "java.lang.reflect.Proxy",
                 "method": "newProxyInstance",
+                "thisObject": false,
+                "type": "binder"
+            },
+            {
+                "class_name": "android.accessibilityservice.AccessibilityService",
+                "method": "takeScreenshot",
+                "thisObject": false,
+                "type": "binder"
+            },
+            {
+                "class_name": "android.accessibilityservice.AccessibilityService",
+                "method": "setServiceInfo",
                 "thisObject": false,
                 "type": "binder"
             }
@@ -637,6 +685,9 @@
             },
             {
                 "name": "process_vm_writev"
+            },
+            {
+                "name": "inotify_add_watch"
             },
             {
                 "name": "memfd_create"
