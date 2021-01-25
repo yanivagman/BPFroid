@@ -486,6 +486,11 @@ static __always_inline unsigned long get_inode_nr_from_file(struct file *file)
     return READ_KERN(READ_KERN(file->f_inode)->i_ino);
 }
 
+static __always_inline const char* get_fs_type_from_file(struct file *file)
+{
+    return READ_KERN(READ_KERN(READ_KERN(READ_KERN(file->f_inode)->i_sb)->s_type)->name);
+}
+
 static __always_inline unsigned short get_inode_mode_from_file(struct file *file)
 {
     return READ_KERN(READ_KERN(file->f_inode)->i_mode);
@@ -520,6 +525,9 @@ static __always_inline u64 get_handler_types(u64 key)
 
 static __inline int has_prefix(char *prefix, char *str, int n)
 {
+#if defined(bpf_target_arm64)
+       return 0;
+#endif
     int i;
     #pragma unroll
     for (i = 0; i < n; prefix++, str++, i++) {
@@ -1819,12 +1827,13 @@ int BPF_KPROBE(trace_security_bprm_check)
         return 0;
     set_buf_off(SUBMIT_BUF_IDX, sizeof(context_t));
 
-    context_t context = init_and_save_context(ctx, submit_p, SECURITY_BPRM_CHECK, 3 /*argnum*/, 0 /*ret*/);
+    context_t context = init_and_save_context(ctx, submit_p, SECURITY_BPRM_CHECK, 4 /*argnum*/, 0 /*ret*/);
 
     struct linux_binprm *bprm = (struct linux_binprm *)PT_REGS_PARM1(ctx);
     struct file* file = get_file_ptr_from_bprm(bprm);
     dev_t s_dev = get_dev_from_file(file);
     unsigned long inode_nr = get_inode_nr_from_file(file);
+    const char *fs_type = get_fs_type_from_file(file);
 
     // Get per-cpu string buffer
     buf_t *string_p = get_buf(STRING_BUF_IDX);
@@ -1843,6 +1852,7 @@ int BPF_KPROBE(trace_security_bprm_check)
     save_str_to_buf(submit_p, (void *)&string_p->buf[*off], DEC_ARG(0, *tags));
     save_to_submit_buf(submit_p, &s_dev, sizeof(dev_t), DEV_T_T, DEC_ARG(1, *tags));
     save_to_submit_buf(submit_p, &inode_nr, sizeof(unsigned long), ULONG_T, DEC_ARG(2, *tags));
+    save_str_to_buf(submit_p, (void *)fs_type, DEC_ARG(3, *tags));
 
     events_perf_submit(ctx);
     return 0;
@@ -1984,10 +1994,6 @@ int BPF_KPROBE(send_bin)
     // 2. We can have multiple cpus - need percpu array
     // 3. We have to use perf submit and not maps as data can be overriden if userspace doesn't consume it fast enough
 
-#if defined(bpf_target_arm64)
-       return 0;
-#endif
-
     int i = 0;
     unsigned int chunk_size;
     u64 id = bpf_get_current_pid_tgid();
@@ -2041,7 +2047,9 @@ int BPF_KPROBE(send_bin)
 
     unsigned int full_chunk_num = bin_args->full_size/F_CHUNK_SIZE;
     void *data = file_buf_p->buf;
-
+#if defined(bpf_target_arm64)
+       return 0;
+#endif
     // Handle full chunks in loop
     #pragma unroll
     for (i = 0; i < 110; i++) {
@@ -2100,10 +2108,6 @@ static __always_inline int do_vfs_write_writev(struct pt_regs *ctx, u32 event_id
     args_t saved_args;
     bool has_filter = false;
     bool filter_match = false;
-
-#if defined(bpf_target_arm64)
-       return 0;
-#endif
 
     bool delete_args = false;
     if (load_args(&saved_args, delete_args, event_id) != 0) {
@@ -2213,10 +2217,6 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
     size_t count;
     struct iovec *vec;
     unsigned long vlen;
-
-#if defined(bpf_target_arm64)
-       return 0;
-#endif
 
     buf_t *submit_p = get_buf(SUBMIT_BUF_IDX);
     if (submit_p == NULL)

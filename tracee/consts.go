@@ -854,7 +854,7 @@ var EventsIDToParams = map[int32][]external.ArgMeta{
 	SysExitEventID:             {{Type: "int", Name: "syscall"}},
 	DoExitEventID:              {},
 	CapCapableEventID:          {{Type: "int", Name: "cap"}, {Type: "int", Name: "syscall"}},
-	SecurityBprmCheckEventID:   {{Type: "const char*", Name: "pathname"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}},
+	SecurityBprmCheckEventID:   {{Type: "const char*", Name: "pathname"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}, {Type: "const char*", Name: "fs_type"}},
 	SecurityFileOpenEventID:    {{Type: "const char*", Name: "pathname"}, {Type: "int", Name: "flags"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}},
 	SecurityInodeUnlinkEventID: {{Type: "const char*", Name: "pathname"}},
 	VfsWriteEventID:            {{Type: "const char*", Name: "pathname"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}, {Type: "size_t", Name: "count"}, {Type: "off_t", Name: "pos"}},
