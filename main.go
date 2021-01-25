@@ -102,6 +102,7 @@ func main() {
 
 			if c.Bool("security-alerts") {
 				cfg.Filter.EventsToTrace = append(cfg.Filter.EventsToTrace, tracee.MemProtAlertEventID)
+				cfg.Filter.EventsToTrace = append(cfg.Filter.EventsToTrace, tracee.UidChangedAlertEventID)
 			}
 			bpfFile, err := getBPFObject()
 			if err != nil {

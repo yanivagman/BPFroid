@@ -130,7 +130,8 @@
 #define SCHED_PROCESS_EXIT    1010
 #define GENERIC_UPROBE        1011
 #define GENERIC_API_UPROBE    1012
-#define MAX_EVENT_ID          1013
+#define UID_CHANGE_ALERT      1013
+#define MAX_EVENT_ID          1014
 
 #define CONFIG_SHOW_SYSCALL         1
 #define CONFIG_EXEC_ENV             2
@@ -324,6 +325,8 @@ BPF_STACK_TRACE(stack_addresses, MAX_STACK_ADDRESSES);  // Used to store stack t
 
 BPF_HASH(types_map, u64, u64);                      // Argument types of generic event handlers
 BPF_HASH(uprobe_off_map, u64, u64);                 // Save uprobe offset to be used in uretprobe
+
+BPF_HASH(pid_to_uid, u32, u32);                     // pid to uid map
 
 /*================================== EVENTS ====================================*/
 
@@ -1412,6 +1415,33 @@ struct bpf_raw_tracepoint_args *ctx
     }
 
     u32 pid = bpf_get_current_pid_tgid();
+    u32 uid = bpf_get_current_uid_gid();
+    u32 *prev_uid = bpf_map_lookup_elem(&pid_to_uid, &pid);
+
+    if (prev_uid == 0) {
+        // If this is the first time we see this uid - save it
+        bpf_map_update_elem(&pid_to_uid, &pid, &uid, BPF_ANY);
+    } else if (*prev_uid != uid) {
+        // A non root user change it's uid -> alert!
+        buf_t *submit_p = get_buf(SUBMIT_BUF_IDX);
+        if (submit_p == NULL)
+            return 0;
+        set_buf_off(SUBMIT_BUF_IDX, sizeof(context_t));
+
+        context_t context = init_and_save_context(ctx, submit_p, UID_CHANGE_ALERT, 2 /*argnum*/, 0 /*ret*/);
+
+        u64 *tags = bpf_map_lookup_elem(&params_names_map, &context.eventid);
+        if (!tags) {
+            return -1;
+        }
+
+        save_to_submit_buf(submit_p, prev_uid, sizeof(unsigned int), UINT_T, DEC_ARG(0, *tags));
+        save_to_submit_buf(submit_p, &uid, sizeof(unsigned int), UINT_T, DEC_ARG(1, *tags));
+
+        events_perf_submit(ctx);
+
+        bpf_map_update_elem(&pid_to_uid, &pid, &uid, BPF_ANY);
+    }
 
     // execve events may add new pids to the traced pids set
     // perform this check before should_trace() so newly executed binaries will be traced
@@ -1781,6 +1811,8 @@ struct bpf_raw_tracepoint_args *ctx
             bpf_map_delete_elem(&new_pidns_map, &pid_ns);
         }
     }
+    bpf_map_delete_elem(&pid_to_uid, &pid);
+
     if (get_config(CONFIG_NEW_PID_FILTER)) {
         // Remove pid from new_pids_map
         bpf_map_delete_elem(&new_pids_map, &pid);
