@@ -502,22 +502,16 @@
         ],
         "uprobes": [
             {
-                "lib_path": "/system/lib64/liblog.so",
-                "sym_name": "android_log_write_string8",
+                "lib_path": "/system/lib64/libbinder_ndk.so",
+                "sym_name": "AIBinder_new",
+                "offset": "",
+                "args_types": [ ]
+            },
+            {
+                "lib_path": "/system/lib64/libcamera2ndk.so",
+                "sym_name": "ACameraManager_openCamera",
                 "offset": "",
                 "args_types": [ "void*", "char*" ]
-            },
-            {
-                "lib_path": "/system/lib64/liblog.so",
-                "sym_name": "android_log_write_string8_len",
-                "offset": "",
-                "args_types": [ "void*", "char*", "size_t" ]
-            },
-            {
-                "lib_path": "/system/lib64/liblog.so",
-                "sym_name": "create_android_log_parser",
-                "offset": "",
-                "args_types": [ "char*", "size_t" ]
             },
             {
                 "lib_path": "/apex/com.android.runtime/lib64/bionic/libc.so",
@@ -527,13 +521,13 @@
             },
             {
                 "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
-                "sym_name": "dlsym",
+                "sym_name": "dlopen",
                 "offset": "",
-                "args_types": [ "void*", "char*" ]
+                "args_types": [ "char*", "int" ]
             },
             {
-                "lib_path": "/apex/com.android.runtime/lib64/bionic/libdl.so",
-                "sym_name": "dlopen",
+                "lib_path": "/apex/com.android.art/lib64/libart.so",
+                "sym_name": "android_dlopen_ext",
                 "offset": "",
                 "args_types": [ "char*", "int" ]
             },
@@ -698,7 +692,7 @@
                 "name": "sched_process_exit"
             },
             {
-                "name": "security_file_open"
+                "name": "vfs_write"
             },
             {
                 "name": "security_bprm_check"
