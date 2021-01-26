@@ -131,7 +131,8 @@
 #define GENERIC_UPROBE        1011
 #define GENERIC_API_UPROBE    1012
 #define UID_CHANGE_ALERT      1013
-#define MAX_EVENT_ID          1014
+#define WRITE_ALERT           1014
+#define MAX_EVENT_ID          1015
 
 #define CONFIG_SHOW_SYSCALL         1
 #define CONFIG_EXEC_ENV             2
@@ -2255,7 +2256,8 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
         return 0;
     set_buf_off(SUBMIT_BUF_IDX, sizeof(context_t));
 
-    context_t context = init_and_save_context(ctx, submit_p, event_id, 5 /*argnum*/, PT_REGS_RC(ctx));
+    context_t context = {};
+    init_context(&context);
 
     bool delete_args = true;
     if (load_args(&saved_args, delete_args, event_id) != 0) {
@@ -2291,6 +2293,30 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
     // Calculate write start offset
     if (start_pos != 0)
         start_pos -= PT_REGS_RC(ctx);
+
+    if (event_id == VFS_WRITE) {
+        unsigned int magic = 0;
+        if ((start_pos == 0) && (count > 4)){
+            bpf_probe_read(&magic, sizeof(unsigned int), ptr);
+        }
+        // time for a magic
+        if ((magic == 0x464c457f) || (magic == 0x04034b50)) {
+            // Alert on write of elf or archive (including zip,jar,apk) files
+            context.eventid = WRITE_ALERT;
+            context.argnum = 4;
+            context.retval = 0;
+            save_context_to_buf(submit_p, (void*)&context);
+            u64 *tags = bpf_map_lookup_elem(&params_names_map, &context.eventid);
+            if (!tags) {
+                return -1;
+            }
+            save_to_submit_buf(submit_p, &magic, sizeof(unsigned int), UINT_T, DEC_ARG(0, *tags));
+            save_str_to_buf(submit_p, (void *)&string_p->buf[*off], DEC_ARG(1, *tags));
+            save_to_submit_buf(submit_p, &s_dev, sizeof(dev_t), DEV_T_T, DEC_ARG(2, *tags));
+            save_to_submit_buf(submit_p, &inode_nr, sizeof(unsigned long), ULONG_T, DEC_ARG(3, *tags));
+            events_perf_submit(ctx);
+        }
+    }
 
     u64 id = bpf_get_current_pid_tgid();
     u32 pid = context.pid;

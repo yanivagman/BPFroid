@@ -153,6 +153,7 @@ const (
 	GenericUprobeEventID
 	GenericApiUprobeEventID
 	UidChangedAlertEventID
+	WriteAlertEventID
 	MaxEventID
 )
 
@@ -525,6 +526,7 @@ var EventsIDToEvent = map[int32]EventConfig{
 	GenericUprobeEventID:       {ID: GenericUprobeEventID, ID32Bit: sys32undefined, Name: "generic_uprobe", Probes: []probe{}, Sets: []string{}},
 	GenericApiUprobeEventID:    {ID: GenericApiUprobeEventID, ID32Bit: sys32undefined, Name: "generic_api_uprobe", Probes: []probe{}, Sets: []string{}},
 	UidChangedAlertEventID:     {ID: UidChangedAlertEventID, ID32Bit: sys32undefined, Name: "uid_changed_alert", Probes: []probe{}, Sets: []string{}},
+	WriteAlertEventID:          {ID: WriteAlertEventID, ID32Bit: sys32undefined, Name: "write_alert", Probes: []probe{}, Sets: []string{}},
 }
 
 // EventsIDToParams is list of the parameters (name and type) used by the events
@@ -863,6 +865,7 @@ var EventsIDToParams = map[int32][]external.ArgMeta{
 	VfsWritevEventID:           {{Type: "const char*", Name: "pathname"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}, {Type: "unsigned long", Name: "vlen"}, {Type: "off_t", Name: "pos"}},
 	MemProtAlertEventID:        {{Type: "alert_t", Name: "alert"}},
 	UidChangedAlertEventID:     {{Type: "unsigned int", Name: "prev_uid"}, {Type: "unsigned int", Name: "cur_uid"}},
+	WriteAlertEventID:          {{Type: "unsigned int", Name: "magic"}, {Type: "const char*", Name: "pathname"}, {Type: "dev_t", Name: "dev"}, {Type: "unsigned long", Name: "inode"}},
 	SchedProcessExitEventID:    {},
 	PidfdSendSignalEventID:     {{Type: "int", Name: "pidfd"}, {Type: "int", Name: "sig"}, {Type: "siginfo_t*", Name: "info"}, {Type: "unsigned int", Name: "flags"}},
 	IoUringSetupEventID:        {{Type: "unsigned int", Name: "entries"}, {Type: "struct io_uring_params*", Name: "p"}},
