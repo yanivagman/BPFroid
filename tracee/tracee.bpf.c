@@ -527,11 +527,19 @@ static __always_inline u64 get_handler_types(u64 key)
     return *types;
 }
 
-static __inline int has_prefix(char *prefix, char *str, int n)
+static __inline int has_prefix(char *prefix_p, char *str_p, int n)
 {
-#if defined(bpf_target_arm64)
-       return 0;
-#endif
+    char prefix_arr[MAX_PATH_PREF_SIZE+1];
+    char str_arr[MAX_PATH_PREF_SIZE+1];
+
+    prefix_arr[MAX_PATH_PREF_SIZE] = 0;
+    str_arr[MAX_PATH_PREF_SIZE] = 0;
+    bpf_probe_read(prefix_arr, MAX_PATH_PREF_SIZE, prefix_p);
+    bpf_probe_read(str_arr, MAX_PATH_PREF_SIZE, str_p);
+
+    char *prefix = prefix_arr;
+    char *str = str_arr;
+
     int i;
     #pragma unroll
     for (i = 0; i < n; prefix++, str++, i++) {
@@ -2031,21 +2039,25 @@ int BPF_KPROBE(send_bin)
     unsigned int chunk_size;
     u64 id = bpf_get_current_pid_tgid();
 
-    bin_args_t *bin_args = bpf_map_lookup_elem(&bin_args_map, &id);
-    if (bin_args == 0) {
+    bin_args_t *bin_args_p = bpf_map_lookup_elem(&bin_args_map, &id);
+    if (bin_args_p == 0) {
         // missed entry or not traced
         return 0;
     }
 
-    if (bin_args->full_size <= 0) {
+    bin_args_t bin_args;
+    bpf_probe_read(&bin_args, sizeof(bin_args_t), bin_args_p);
+
+    if (bin_args.full_size <= 0) {
         // If there are more vector elements, continue to the next one
-        bin_args->iov_idx++;
-        if (bin_args->iov_idx < bin_args->iov_len) {
+        bin_args.iov_idx++;
+        if (bin_args.iov_idx < bin_args.iov_len) {
             // Handle the rest of the write recursively
             struct iovec io_vec;
-            bpf_probe_read(&io_vec, sizeof(struct iovec), &bin_args->vec[bin_args->iov_idx]);
-            bin_args->ptr = io_vec.iov_base;
-            bin_args->full_size = io_vec.iov_len;
+            bpf_probe_read(&io_vec, sizeof(struct iovec), &bin_args.vec[bin_args.iov_idx]);
+            bin_args.ptr = io_vec.iov_base;
+            bin_args.full_size = io_vec.iov_len;
+            bpf_map_update_elem(&bin_args_map, &id, &bin_args, BPF_ANY);
             bpf_tail_call(ctx, &prog_array, TAIL_SEND_BIN);
         }
         bpf_map_delete_elem(&bin_args_map, &id);
@@ -2066,23 +2078,21 @@ int BPF_KPROBE(send_bin)
 #define F_CHUNK_OFF   (F_POS_OFF + sizeof(off_t))
 #define F_CHUNK_SIZE  (MAX_PERCPU_BUFSIZE >> 1)
 
-    bpf_probe_read((void **)&(file_buf_p->buf[F_SEND_TYPE]), sizeof(u8), &bin_args->type);
+    bpf_probe_read((void **)&(file_buf_p->buf[F_SEND_TYPE]), sizeof(u8), &bin_args.type);
 
     u32 mnt_id = get_task_mnt_ns_id((struct task_struct *)bpf_get_current_task());
     bpf_probe_read((void **)&(file_buf_p->buf[F_MNT_NS]), sizeof(u32), &mnt_id);
 
     // Save metadata to be used in filename
-    bpf_probe_read((void **)&(file_buf_p->buf[F_META_OFF]), SEND_META_SIZE, bin_args->metadata);
+    bpf_probe_read((void **)&(file_buf_p->buf[F_META_OFF]), SEND_META_SIZE, bin_args.metadata);
 
     // Save number of written bytes. Set this to CHUNK_SIZE for full chunks
     chunk_size = F_CHUNK_SIZE;
     bpf_probe_read((void **)&(file_buf_p->buf[F_SZ_OFF]), sizeof(unsigned int), &chunk_size);
 
-    unsigned int full_chunk_num = bin_args->full_size/F_CHUNK_SIZE;
+    unsigned int full_chunk_num = bin_args.full_size/F_CHUNK_SIZE;
     void *data = file_buf_p->buf;
-#if defined(bpf_target_arm64)
-       return 0;
-#endif
+
     // Handle full chunks in loop
     #pragma unroll
     for (i = 0; i < 110; i++) {
@@ -2093,19 +2103,20 @@ int BPF_KPROBE(send_bin)
             break;
 
         // Save binary chunk and file position of write
-        bpf_probe_read((void **)&(file_buf_p->buf[F_POS_OFF]), sizeof(off_t), &bin_args->start_off);
-        bpf_probe_read((void **)&(file_buf_p->buf[F_CHUNK_OFF]), F_CHUNK_SIZE, bin_args->ptr);
-        bin_args->ptr += F_CHUNK_SIZE;
-        bin_args->start_off += F_CHUNK_SIZE;
+        bpf_probe_read((void **)&(file_buf_p->buf[F_POS_OFF]), sizeof(off_t), &bin_args.start_off);
+        bpf_probe_read((void **)&(file_buf_p->buf[F_CHUNK_OFF]), F_CHUNK_SIZE, bin_args.ptr);
+        bin_args.ptr += F_CHUNK_SIZE;
+        bin_args.start_off += F_CHUNK_SIZE;
 
         bpf_perf_event_output(ctx, &file_writes, BPF_F_CURRENT_CPU, data, F_CHUNK_OFF+F_CHUNK_SIZE);
     }
 
-    chunk_size = bin_args->full_size - i*F_CHUNK_SIZE;
+    chunk_size = bin_args.full_size - i*F_CHUNK_SIZE;
 
     if (chunk_size > F_CHUNK_SIZE) {
         // Handle the rest of the write recursively
-        bin_args->full_size = chunk_size;
+        bin_args.full_size = chunk_size;
+        bpf_map_update_elem(&bin_args_map, &id, &bin_args, BPF_ANY);
         bpf_tail_call(ctx, &prog_array, TAIL_SEND_BIN);
         bpf_map_delete_elem(&bin_args_map, &id);
         return 0;
@@ -2113,22 +2124,23 @@ int BPF_KPROBE(send_bin)
 
     // Save last chunk
     chunk_size = ((chunk_size - 1) & ((MAX_PERCPU_BUFSIZE >> 1) - 1)) + 1;
-    bpf_probe_read((void **)&(file_buf_p->buf[F_CHUNK_OFF]), chunk_size, bin_args->ptr);
+    bpf_probe_read((void **)&(file_buf_p->buf[F_CHUNK_OFF]), chunk_size, bin_args.ptr);
     bpf_probe_read((void **)&(file_buf_p->buf[F_SZ_OFF]), sizeof(unsigned int), &chunk_size);
-    bpf_probe_read((void **)&(file_buf_p->buf[F_POS_OFF]), sizeof(off_t), &bin_args->start_off);
+    bpf_probe_read((void **)&(file_buf_p->buf[F_POS_OFF]), sizeof(off_t), &bin_args.start_off);
 
     // Satisfy validator by setting buffer bounds
     int size = ((F_CHUNK_OFF+chunk_size-1) & (MAX_PERCPU_BUFSIZE - 1)) + 1;
     bpf_perf_event_output(ctx, &file_writes, BPF_F_CURRENT_CPU, data, size);
 
     // We finished writing an element of the vector - continue to next element
-    bin_args->iov_idx++;
-    if (bin_args->iov_idx < bin_args->iov_len) {
+    bin_args.iov_idx++;
+    if (bin_args.iov_idx < bin_args.iov_len) {
         // Handle the rest of the write recursively
         struct iovec io_vec;
-        bpf_probe_read(&io_vec, sizeof(struct iovec), &bin_args->vec[bin_args->iov_idx]);
-        bin_args->ptr = io_vec.iov_base;
-        bin_args->full_size = io_vec.iov_len;
+        bpf_probe_read(&io_vec, sizeof(struct iovec), &bin_args.vec[bin_args.iov_idx]);
+        bin_args.ptr = io_vec.iov_base;
+        bin_args.full_size = io_vec.iov_len;
+        bpf_map_update_elem(&bin_args_map, &id, &bin_args, BPF_ANY);
         bpf_tail_call(ctx, &prog_array, TAIL_SEND_BIN);
     }
 
