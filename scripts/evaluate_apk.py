@@ -71,7 +71,8 @@ else:
 # Start tracee with package name filter:
 print("Strating BPFroid...")
 os.system("adb shell su -c rm /data/local/tmp/out/tracee.pid 2> /dev/null")
-bpfroid = os.popen("adb shell su -c /data/local/tmp/tracee --security-alerts -c mem -c exec -c write=memfd* -c write=/* -c clear-dir -t e=security_bprm_check -t e=vfs_write,vfs_writev -t vfs_write.pathname=/* -t vfs_write.pathname=memfd* -t package=" + package_name)
+#bpfroid = os.popen("adb shell su -c /data/local/tmp/tracee --security-alerts -c mem -c exec -c write=memfd* -c write=/* -c clear-dir -t s=default -t e=security_bprm_check,execve,execveat -t e=vfs_write,vfs_writev -t vfs_write.pathname=/* -t vfs_write.pathname=memfd* -t package=" + package_name)
+bpfroid = os.popen("adb shell su -c /data/local/tmp/tracee --security-alerts -c clear-dir -t e=security_bprm_check,execve,execveat -t e=vfs_write,vfs_writev -t vfs_write.pathname=memfd* -t package=" + package_name)
 for x in range(1000):
 	bpfroid_pid = os.popen("adb shell su -c cat /data/local/tmp/out/tracee.pid 2> /dev/null").read().rstrip()
 	if bpfroid_pid != "":
@@ -87,8 +88,6 @@ print("BPFroid ready (pid: " + bpfroid_pid + ")")
 rc = os.system("adb shell am start -n " + package_name + "/" + activity_name)
 if rc != 0:
 	print("failed to start application!")
-	close_bpfroid(bpfroid_pid)
-	exit()
 
 # Wake up device (simulating power key)
 os.system("adb shell input keyevent 26")
@@ -96,10 +95,10 @@ os.system("adb shell input keyevent 26")
 os.system("adb shell input keyevent 82")
 
 # Sleep
-print("\nGoing to sleep for 5 minutes... You can interact with the application during this time\n")
-time.sleep(5)
+print("\nYou can now interact with the application")
+input("Press enter when finished...")
 
-print("Timeout. Killing application...")
+print("Killing application...")
 #os.system("adb shell pm disable " + package_name)
 os.system("adb shell am force-stop " + package_name)
 os.system("adb uninstall " + package_name)

@@ -2312,8 +2312,8 @@ static __always_inline int do_vfs_write_writev_tail(struct pt_regs *ctx, u32 eve
             bpf_probe_read(&magic, sizeof(unsigned int), ptr);
         }
         // time for a magic
-        if ((magic == 0x464c457f) || (magic == 0x04034b50)) {
-            // Alert on write of elf or archive (including zip,jar,apk) files
+        if ((magic == 0x464c457f) || (magic == 0x04034b50) || (magic == 0x0a786564)) {
+            // Alert on write of elf, dex or archive (including zip,jar,apk) files
             context.eventid = WRITE_ALERT;
             context.argnum = 4;
             context.retval = 0;

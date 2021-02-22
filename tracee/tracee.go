@@ -1763,6 +1763,18 @@ func (t *Tracee) prepareArgsForPrint(ctx *context, args map[argTag]interface{}) 
 		if alert, isAlert := args[t.EncParamName[ctx.EventID%2]["alert"]].(alert); isAlert {
 			args[t.EncParamName[ctx.EventID%2]["alert"]] = PrintAlert(alert)
 		}
+	case WriteAlertEventID:
+		if magic, isUint32 := args[t.EncParamName[ctx.EventID%2]["magic"]].(uint32); isUint32 {
+			if magic == 0x464c457f {
+				args[t.EncParamName[ctx.EventID%2]["magic"]] = "Elf"
+			}
+			if magic == 0x04034b50 {
+				args[t.EncParamName[ctx.EventID%2]["magic"]] = "Archive(zip/jar/apk)"
+			}
+			if magic == 0x0a786564 {
+				args[t.EncParamName[ctx.EventID%2]["magic"]] = "Dex"
+			}
+		}
 	case CloneEventID:
 		if flags, isUint64 := args[t.EncParamName[ctx.EventID%2]["flags"]].(uint64); isUint64 {
 			args[t.EncParamName[ctx.EventID%2]["flags"]] = PrintCloneFlags(flags)
