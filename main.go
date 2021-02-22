@@ -464,11 +464,14 @@ To 'escape' those operators, please use single quotes, e.g.: 'uid>0'
 
 		// This filter shouldn't be used in parallel to the uid filter
 		if strings.HasPrefix(f, "package") {
-			err := parsePackageFilter(strings.TrimPrefix(f, "package"), filter.UIDFilter)
+			appDataPaths, err := parsePackageFilter(strings.TrimPrefix(f, "package"), filter.UIDFilter)
 			if err != nil {
 				return tracee.Filter{}, err
 			}
-			continue
+			// use appDataPaths as an argfilter to avoid printing writes to app data path (only one package filter supported)
+			f = "vfs_write.pathname!=" + appDataPaths[0] + "*"
+			filterName = "vfs_write.pathname"
+			operatorAndValues = "!=" + appDataPaths[0] + "*"
 		}
 
 		if strings.Contains(f, ".") {
@@ -611,10 +614,10 @@ To 'escape' those operators, please use single quotes, e.g.: 'uid>0'
 }
 
 // Filter by android package name
-func parsePackageFilter(operatorAndValues string, uintFilter *tracee.UintFilter) error {
+func parsePackageFilter(operatorAndValues string, uintFilter *tracee.UintFilter) ([]string, error) {
 	uintFilter.Enabled = true
 	if len(operatorAndValues) < 2 {
-		return fmt.Errorf("invalid operator and/or values given to filter: %s", operatorAndValues)
+		return nil, fmt.Errorf("invalid operator and/or values given to filter: %s", operatorAndValues)
 	}
 	valuesString := string(operatorAndValues[1:])
 	operatorString := string(operatorAndValues[0])
@@ -622,9 +625,11 @@ func parsePackageFilter(operatorAndValues string, uintFilter *tracee.UintFilter)
 
 	packageList, err := os.Open("/data/system/packages.list")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer packageList.Close()
+
+	var appDataPaths []string
 
 	for i := range values {
 		switch operatorString {
@@ -635,26 +640,27 @@ func parsePackageFilter(operatorAndValues string, uintFilter *tracee.UintFilter)
 					packLine := strings.Split(scanner.Text(), " ")
 					val, err := strconv.ParseUint(packLine[1], 10, 64)
 					if err != nil {
-						return fmt.Errorf("failed to scan packages.list file\n")
+						return nil, fmt.Errorf("failed to scan packages.list file\n")
 					}
 					if uintFilter.Is32Bit && (val > math.MaxUint32) {
-						return fmt.Errorf("package filter uid is too big: %s", packLine[1])
+						return nil, fmt.Errorf("package filter uid is too big: %s", packLine[1])
 					}
 					if packLine[2] == "1" {
 						fmt.Printf("Warning! Package was built with debuggable flag. API calls will not be traced!\n\n")
 					}
 					uintFilter.Equal = append(uintFilter.Equal, val)
+					appDataPaths = append(appDataPaths, packLine[3])
 				}
 			}
 			if err := scanner.Err(); err != nil {
-				return fmt.Errorf("failed to scan packages.list file\n")
+				return nil, fmt.Errorf("failed to scan packages.list file\n")
 			}
 		default:
-			return fmt.Errorf("invalid filter operator: %s", operatorString)
+			return nil, fmt.Errorf("invalid filter operator: %s", operatorString)
 		}
 	}
 
-	return nil
+	return appDataPaths, nil
 }
 
 func parseUintFilter(operatorAndValues string, uintFilter *tracee.UintFilter) error {
