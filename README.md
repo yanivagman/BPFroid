@@ -2,6 +2,8 @@
 Trace Android framework API, native libraries, system calls and other events using eBPF.
 Based on Tracee: https://github.com/aquasecurity/tracee
 
+For more information about this work also see: https://arxiv.org/abs/2105.14344
+
 ## Requirements
 * Android linux kernel that provides BPF capabilities: BPF, Kprobes and Uprobes
 * kernel headers (used for BPF program compilation)
