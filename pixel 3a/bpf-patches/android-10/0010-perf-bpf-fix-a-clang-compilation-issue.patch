@@ -1,0 +1,52 @@
+From cfd81184ea103e517180ba06503d5590e56c5fa9 Mon Sep 17 00:00:00 2001
+From: Yonghong Song <yhs@fb.com>
+Date: Thu, 7 Sep 2017 18:36:15 -0700
+Subject: [PATCH 10/15] perf/bpf: fix a clang compilation issue
+
+clang does not support variable length array for structure member.
+It has the following error during compilation:
+
+kernel/trace/trace_syscalls.c:568:17: error: fields must have a constant size:
+'variable length array in structure' extension will never be supported
+                unsigned long args[sys_data->nb_args];
+                              ^
+
+The fix is to use a fixed array length instead.
+
+Reported-by: Nick Desaulniers <ndesaulniers@google.com>
+Signed-off-by: Yonghong Song <yhs@fb.com>
+Signed-off-by: David S. Miller <davem@davemloft.net>
+---
+ include/linux/syscalls.h      | 2 ++
+ kernel/trace/trace_syscalls.c | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index c7cb8dabd567..6c1e22cef698 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -198,6 +198,8 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
+ #define SYSCALL_DEFINE5(name, ...) SYSCALL_DEFINEx(5, _##name, __VA_ARGS__)
+ #define SYSCALL_DEFINE6(name, ...) SYSCALL_DEFINEx(6, _##name, __VA_ARGS__)
+ 
++#define SYSCALL_DEFINE_MAXARGS	6
++
+ #define SYSCALL_DEFINEx(x, sname, ...)				\
+ 	SYSCALL_METADATA(sname, x, __VA_ARGS__)			\
+ 	__SYSCALL_DEFINEx(x, sname, __VA_ARGS__)
+diff --git a/kernel/trace/trace_syscalls.c b/kernel/trace/trace_syscalls.c
+index 8fca3b030c92..070ccb987245 100644
+--- a/kernel/trace/trace_syscalls.c
++++ b/kernel/trace/trace_syscalls.c
+@@ -565,7 +565,7 @@ static int perf_call_bpf_enter(struct bpf_prog *prog, struct pt_regs *regs,
+ 	struct syscall_tp_t {
+ 		unsigned long long regs;
+ 		unsigned long syscall_nr;
+-		unsigned long args[sys_data->nb_args];
++		unsigned long args[SYSCALL_DEFINE_MAXARGS];
+ 	} param;
+ 	int i;
+ 
+-- 
+2.29.2
+

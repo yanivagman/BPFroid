@@ -1,0 +1,38 @@
+From d88b5247359daa47031bb6d547ba4f3f5eed1207 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Gregorczyk?= <michalgr@fb.com>
+Date: Mon, 23 Sep 2019 20:55:17 +0200
+Subject: [PATCH 11/14] Set config options needed for BPF based tracing.
+
+---
+ arch/arm64/configs/bonito_defconfig | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/configs/bonito_defconfig b/arch/arm64/configs/bonito_defconfig
+index 28dc8b205839..64d0657b39fd 100644
+--- a/arch/arm64/configs/bonito_defconfig
++++ b/arch/arm64/configs/bonito_defconfig
+@@ -44,11 +44,10 @@ CONFIG_BPF_SYSCALL=y
+ CONFIG_EMBEDDED=y
+ # CONFIG_COMPAT_BRK is not set
+ CONFIG_PROFILING=y
++CONFIG_KPROBES=y
+ CONFIG_JUMP_LABEL=y
+ CONFIG_CC_STACKPROTECTOR_STRONG=y
+ CONFIG_LTO_CLANG=y
+-CONFIG_CFI_CLANG=y
+-CONFIG_SHADOW_CALL_STACK=y
+ CONFIG_ARCH_MMAP_RND_COMPAT_BITS=16
+ CONFIG_MODULES=y
+ CONFIG_MODULE_UNLOAD=y
+@@ -635,6 +634,8 @@ CONFIG_SCHEDSTATS=y
+ CONFIG_SCHED_STACK_END_CHECK=y
+ # CONFIG_DEBUG_PREEMPT is not set
+ CONFIG_IPC_LOGGING=y
++CONFIG_FTRACE_SYSCALLS=y
++CONFIG_UPROBE_EVENT=y
+ CONFIG_CPU_FREQ_SWITCH_PROFILER=y
+ CONFIG_CC_WERROR=y
+ CONFIG_KGDB=y
+-- 
+2.29.2
+

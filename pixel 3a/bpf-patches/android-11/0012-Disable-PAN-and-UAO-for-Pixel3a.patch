@@ -1,0 +1,32 @@
+From 009e915e1ab56954ec439ded5c1d55055abd566b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Micha=C5=82=20Gregorczyk?= <michalgr@fb.com>
+Date: Sat, 5 Oct 2019 21:32:13 -0400
+Subject: [PATCH 12/14] Disable PAN and UAO for Pixel3a
+
+Currently bpf programs on Pixel3a can't access user-land strings. The issue was
+brought up before by Joel Fernandes and Will Deacon explained relevant arm64
+capabilities here: https://lore.kernel.org/patchwork/patch/1069552/#1267047.
+
+As a mitigation I am disabling both UAO and PAN. The kernel is intended for
+insepction of trusted applications so that should be fine.
+---
+ arch/arm64/configs/bonito_defconfig | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm64/configs/bonito_defconfig b/arch/arm64/configs/bonito_defconfig
+index 64d0657b39fd..2286b7340b69 100644
+--- a/arch/arm64/configs/bonito_defconfig
++++ b/arch/arm64/configs/bonito_defconfig
+@@ -78,7 +78,9 @@ CONFIG_ARMV8_DEPRECATED=y
+ CONFIG_SWP_EMULATION=y
+ CONFIG_CP15_BARRIER_EMULATION=y
+ CONFIG_SETEND_EMULATION=y
++# CONFIG_ARM64_PAN is not set
+ # CONFIG_ARM64_VHE is not set
++# CONFIG_ARM64_UAO is not set
+ CONFIG_RANDOMIZE_BASE=y
+ # CONFIG_EFI is not set
+ CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=y
+-- 
+2.29.2
+

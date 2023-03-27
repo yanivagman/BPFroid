@@ -1,0 +1,11 @@
+drops {
+  android_build_drop {
+    build_id: "6891296"
+    target: "kernel_bonito"
+    source_file: "dtbo.img"
+  }
+  dest_file: "dtbo.img"
+  version: "Linux version 4.9.232-gdc3a39a45881-ab6891296 (android-build@abfarm582) (Android (6443078 based on r383902) clang version 11.0.1 (https://android.googlesource.com/toolchain/llvm-project b397f81060ce6d701042b782172ed13bee898b79)) #0 SMP PREEMPT Thu Oct 8 03:48:17 UTC 2020"
+  version_group: "kernel-and-modules"
+  git_project: "device/google/bonito-kernel"
+}

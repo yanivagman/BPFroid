@@ -1,0 +1,66 @@
+From a43b8b3bbe2f4d58902afdf6b7e6b190a8d0ce36 Mon Sep 17 00:00:00 2001
+From: Pratyush Anand <panand@redhat.com>
+Date: Wed, 2 Nov 2016 14:40:45 +0530
+Subject: [PATCH 07/15] arm64: introduce mm context flag to keep 32 bit task
+ information
+
+We need to decide in some cases like uprobe instruction analysis that
+whether the current mm context belongs to a 32 bit task or 64 bit.
+
+This patch has introduced an unsigned flag variable in mm_context_t.
+Currently, we set and clear TIF_32BIT depending on the condition that
+whether an elf binary load sets personality for 32 bit or 64 bit
+respectively.
+
+Signed-off-by: Pratyush Anand <panand@redhat.com>
+Signed-off-by: Catalin Marinas <catalin.marinas@arm.com>
+---
+ arch/arm64/include/asm/elf.h | 12 ++++++++++--
+ arch/arm64/include/asm/mmu.h |  1 +
+ 2 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/include/asm/elf.h b/arch/arm64/include/asm/elf.h
+index d46c1941cfae..ae83446f5e45 100644
+--- a/arch/arm64/include/asm/elf.h
++++ b/arch/arm64/include/asm/elf.h
+@@ -137,7 +137,11 @@ typedef struct user_fpsimd_state elf_fpregset_t;
+  */
+ #define ELF_PLAT_INIT(_r, load_addr)	(_r)->regs[0] = 0
+ 
+-#define SET_PERSONALITY(ex)		clear_thread_flag(TIF_32BIT);
++#define SET_PERSONALITY(ex)						\
++({									\
++	clear_bit(TIF_32BIT, &current->mm->context.flags);		\
++	clear_thread_flag(TIF_32BIT);					\
++})
+ 
+ /* update AT_VECTOR_SIZE_ARCH if the number of NEW_AUX_ENT entries changes */
+ #define _SET_AUX_ENT_VDSO						\
+@@ -184,7 +188,11 @@ typedef compat_elf_greg_t		compat_elf_gregset_t[COMPAT_ELF_NGREG];
+ 					 ((x)->e_flags & EF_ARM_EABI_MASK))
+ 
+ #define compat_start_thread		compat_start_thread
+-#define COMPAT_SET_PERSONALITY(ex)	set_thread_flag(TIF_32BIT);
++#define COMPAT_SET_PERSONALITY(ex)					\
++({									\
++	set_bit(TIF_32BIT, &current->mm->context.flags);		\
++	set_thread_flag(TIF_32BIT);					\
++ })
+ #ifdef CONFIG_VDSO32
+ #define COMPAT_ARCH_DLINFO		_SET_AUX_ENT_VDSO
+ #else
+diff --git a/arch/arm64/include/asm/mmu.h b/arch/arm64/include/asm/mmu.h
+index 1464b50e560a..4de1be305e11 100644
+--- a/arch/arm64/include/asm/mmu.h
++++ b/arch/arm64/include/asm/mmu.h
+@@ -26,6 +26,7 @@
+ typedef struct {
+ 	atomic64_t	id;
+ 	void		*vdso;
++	unsigned long	flags;
+ } mm_context_t;
+ 
+ /*
+-- 
+2.29.2
+

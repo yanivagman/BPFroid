@@ -1,0 +1,37 @@
+From 3b5fdf5f0ad2c03bfc05f95eb8bf785e673204d5 Mon Sep 17 00:00:00 2001
+From: Pratyush Anand <panand@redhat.com>
+Date: Wed, 2 Nov 2016 14:40:42 +0530
+Subject: [PATCH 03/14] arm64: kgdb_step_brk_fn: ignore other's exception
+
+ARM64 step exception does not have any syndrome information. So, it is
+responsibility of exception handler to take care that they handle it
+only if exception was raised for them.
+
+Since kgdb_step_brk_fn() always returns 0, therefore we might have problem
+when we will have other step handler registered as well.
+
+This patch fixes kgdb_step_brk_fn() to return error in case of step handler
+was not meant for kgdb.
+
+Signed-off-by: Pratyush Anand <panand@redhat.com>
+Signed-off-by: Catalin Marinas <catalin.marinas@arm.com>
+---
+ arch/arm64/kernel/kgdb.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/arch/arm64/kernel/kgdb.c b/arch/arm64/kernel/kgdb.c
+index 72a660a74ff9..5de7d35ae1ea 100644
+--- a/arch/arm64/kernel/kgdb.c
++++ b/arch/arm64/kernel/kgdb.c
+@@ -255,6 +255,8 @@ static int kgdb_step_brk_fn(struct pt_regs *regs, unsigned int esr)
+ {
+ 	if (user_mode(regs))
+ 		return DBG_HOOK_ERROR;
++	if (!kgdb_single_step)
++		return DBG_HOOK_ERROR;
+ 
+ 	kgdb_handle_exception(1, SIGTRAP, 0, regs);
+ 	return DBG_HOOK_HANDLED;
+-- 
+2.29.2
+

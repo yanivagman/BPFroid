@@ -1,0 +1,31 @@
+From 7eeb8d90b493180348a4e5bf790e1b03617496e4 Mon Sep 17 00:00:00 2001
+From: yanivagman <yanivagman@gmail.com>
+Date: Thu, 1 Oct 2020 18:02:42 +0300
+Subject: [PATCH 13/14] Enable touchscreen driver instead of module
+
+---
+ arch/arm64/configs/bonito_defconfig | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/arch/arm64/configs/bonito_defconfig b/arch/arm64/configs/bonito_defconfig
+index 2286b7340b69..02fff4171232 100644
+--- a/arch/arm64/configs/bonito_defconfig
++++ b/arch/arm64/configs/bonito_defconfig
+@@ -325,10 +325,10 @@ CONFIG_JOYSTICK_XPAD=y
+ CONFIG_JOYSTICK_XPAD_FF=y
+ CONFIG_JOYSTICK_XPAD_LEDS=y
+ CONFIG_INPUT_TOUCHSCREEN=y
+-CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_v27=m
+-CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI_DEV_v27=m
+-CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_v27=m
+-CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_TEST_REPORTING_v27=m
++CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_v27=y
++CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_RMI_DEV_v27=y
++CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_v27=y
++CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_TEST_REPORTING_v27=y
+ CONFIG_TOUCHSCREEN_TBN=y
+ CONFIG_INPUT_MISC=y
+ CONFIG_INPUT_HBTP_INPUT=y
+-- 
+2.29.2
+

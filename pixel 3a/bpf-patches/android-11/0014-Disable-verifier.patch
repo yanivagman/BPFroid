@@ -1,0 +1,43 @@
+From 4efe49e7a3686ce3943d87152559b54f6f778207 Mon Sep 17 00:00:00 2001
+From: yanivagman <yanivagman@gmail.com>
+Date: Thu, 29 Oct 2020 13:14:50 +0200
+Subject: [PATCH 14/14] Disable verifier
+
+---
+ kernel/bpf/verifier.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/kernel/bpf/verifier.c b/kernel/bpf/verifier.c
+index 335c00209f74..15ece9563357 100644
+--- a/kernel/bpf/verifier.c
++++ b/kernel/bpf/verifier.c
+@@ -962,6 +962,7 @@ static int check_stack_boundary(struct bpf_verifier_env *env, int regno,
+ 		    regs[regno].imm  == 0)
+ 			return 0;
+ 
++		return 0;
+ 		verbose("R%d type=%s expected=%s\n", regno,
+ 			reg_type_str[regs[regno].type],
+ 			reg_type_str[PTR_TO_STACK]);
+@@ -1024,8 +1025,8 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
+ 	if (arg_type == ARG_PTR_TO_MAP_KEY ||
+ 	    arg_type == ARG_PTR_TO_MAP_VALUE) {
+ 		expected_type = PTR_TO_STACK;
+-		if (type != PTR_TO_PACKET && type != expected_type)
+-			goto err_type;
++		//if (type != PTR_TO_PACKET && type != expected_type)
++		//	goto err_type;
+ 	} else if (arg_type == ARG_CONST_STACK_SIZE ||
+ 		   arg_type == ARG_CONST_STACK_SIZE_OR_ZERO) {
+ 		expected_type = CONST_IMM;
+@@ -1118,6 +1119,7 @@ static int check_func_arg(struct bpf_verifier_env *env, u32 regno,
+ 
+ 	return err;
+ err_type:
++	return 0;
+ 	verbose("R%d type=%s expected=%s\n", regno,
+ 		reg_type_str[type], reg_type_str[expected_type]);
+ 	return -EACCES;
+-- 
+2.29.2
+
