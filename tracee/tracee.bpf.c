@@ -430,6 +430,16 @@ static __always_inline bool is_compat(struct task_struct *task)
 #endif
 }
 
+static __always_inline int get_syscall_id_from_regs(struct pt_regs *regs)
+{
+#if defined(bpf_target_x86)
+    int id = READ_KERN(regs->orig_ax);
+#elif defined(bpf_target_arm64)
+    int id = READ_KERN(regs->syscallno);
+#endif
+    return id;
+}
+
 #if defined(bpf_target_x86)
 static __always_inline struct pt_regs* get_task_pt_regs(struct task_struct *task)
 {
@@ -1530,7 +1540,7 @@ struct bpf_raw_tracepoint_args *ctx
     ret = args->ret;
 #else
     struct pt_regs *regs = (struct pt_regs*)ctx->args[0];
-    id = READ_KERN(regs->orig_ax);
+    id = get_syscall_id_from_regs(regs);
     ret = ctx->args[1];
 #endif
 
