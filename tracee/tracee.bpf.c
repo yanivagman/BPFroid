@@ -1394,33 +1394,32 @@ struct bpf_raw_tracepoint_args *ctx
 #else // LINUX_VERSION_CODE
     id = ctx->args[1];
 #if defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER)
-    struct pt_regs regs = {};
-    bpf_probe_read(&regs, sizeof(struct pt_regs), (void*)ctx->args[0]);
+    struct pt_regs *regs = (struct pt_regs *) ctx->args[0];
 
     if (is_x86_compat(task)) {
 #if defined(bpf_target_x86)
-        args_tmp.args[0] = regs.bx;
-        args_tmp.args[1] = regs.cx;
-        args_tmp.args[2] = regs.dx;
-        args_tmp.args[3] = regs.si;
-        args_tmp.args[4] = regs.di;
-        args_tmp.args[5] = regs.bp;
+        args_tmp.args[0] = READ_KERN(regs->bx);
+        args_tmp.args[1] = READ_KERN(regs->cx);
+        args_tmp.args[2] = READ_KERN(regs->dx);
+        args_tmp.args[3] = READ_KERN(regs->si);
+        args_tmp.args[4] = READ_KERN(regs->di);
+        args_tmp.args[5] = READ_KERN(regs->bp);
 #endif // bpf_target_x86
     } else {
-        args_tmp.args[0] = PT_REGS_PARM1(&regs);
-        args_tmp.args[1] = PT_REGS_PARM2(&regs);
-        args_tmp.args[2] = PT_REGS_PARM3(&regs);
-        args_tmp.args[3] = PT_REGS_PARM4(&regs);
-        args_tmp.args[4] = PT_REGS_PARM5(&regs);
-        args_tmp.args[5] = PT_REGS_PARM6(&regs);
+        args_tmp.args[0] = READ_KERN(PT_REGS_PARM1(regs));
+        args_tmp.args[1] = READ_KERN(PT_REGS_PARM2(regs));
+        args_tmp.args[2] = READ_KERN(PT_REGS_PARM3(regs));
+#if defined(bpf_target_x86)
+        // x86-64: r10 used instead of rcx (4th param to a syscall)
+        args_tmp.args[3] = READ_KERN(regs->r10);
+#else
+        args_tmp.args[3] = READ_KERN(PT_REGS_PARM4(regs));
+#endif
+        args_tmp.args[4] = READ_KERN(PT_REGS_PARM5(regs));
+        args_tmp.args[5] = READ_KERN(PT_REGS_PARM6(regs));
     }
 #else // CONFIG_ARCH_HAS_SYSCALL_WRAPPER
-    args_tmp.args[0] = ctx->args[0];
-    args_tmp.args[1] = ctx->args[1];
-    args_tmp.args[2] = ctx->args[2];
-    args_tmp.args[3] = ctx->args[3];
-    args_tmp.args[4] = ctx->args[4];
-    args_tmp.args[5] = ctx->args[5];
+    bpf_probe_read(args_tmp.args, sizeof(6 * sizeof(u64)), (void *) ctx->args);
 #endif // CONFIG_ARCH_HAS_SYSCALL_WRAPPER
 #endif // LINUX_VERSION_CODE
 
