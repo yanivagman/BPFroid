@@ -1,4 +1,4 @@
-FROM arm64v8/golang:alpine
-RUN apk update
-RUN apk add clang llvm git vim make gcc wget libc6-compat coreutils elfutils-dev linux-headers musl-dev libelf-static zlib-static
+FROM arm64v8/golang:1.20.7-bullseye
+RUN apt update
+RUN apt-get install -y clang llvm git vim make gcc wget libc6 coreutils libelf-dev musl-tools zlib1g-dev linux-headers-arm64
 WORKDIR /
