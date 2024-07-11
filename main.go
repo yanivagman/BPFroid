@@ -380,13 +380,14 @@ Examples:
   --trace openat.pathname=/tmp*                                | only trace 'openat' events that have 'pathname' prefixed by "/tmp"
   --trace openat.pathname!=/tmp/1,/bin/ls                      | don't trace 'openat' events that have 'pathname' equals /tmp/1 or /bin/ls
   --trace comm=bash --trace follow                             | trace all events that originated from bash or from one of the processes spawned by bash
+  --trace package=com.example.app123                           | only trace events from com.example.app123 package
 
 
 Note: some of the above operators have special meanings in different shells.
 To 'escape' those operators, please use single quotes, e.g.: 'uid>0'
 `
 
-	if len(filters) == 1 && filters[0] == "help" {
+	if len(filters) >= 1 && filters[0] == "help" {
 		return tracee.Filter{}, fmt.Errorf(filterHelp)
 	}
 
@@ -601,7 +602,7 @@ To 'escape' those operators, please use single quotes, e.g.: 'uid>0'
 			continue
 		}
 
-		return tracee.Filter{}, fmt.Errorf("invalid filter option specified, use '--filter help' for more info")
+		return tracee.Filter{}, fmt.Errorf("invalid filter option specified, use '--trace help' for more info")
 	}
 
 	var err error
